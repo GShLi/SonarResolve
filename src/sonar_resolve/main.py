@@ -160,7 +160,7 @@ class SonarToJiraProcessor:
                 return jira_project_key
 
             # 如果没有找到匹配的项目，创建新项目
-            logger.info(f"未找到匹配的Jira项目，为SonarQube项目 {sonar_project_key} 创建新项目...")
+            logger.info(f"未找到匹配的Jira项目，为SonarQube项目 {sonar_project_key} 创建新JIRA项目...")
 
             # 生成Jira项目key（确保符合Jira规范）
             jira_project_key = self._generate_jira_project_key(sonar_project_key)
