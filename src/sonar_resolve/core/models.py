@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from .config import Config
 
 
 @dataclass
@@ -74,7 +74,7 @@ class JiraTask:
     @classmethod
     def from_sonar_issue(cls, sonar_issue: SonarIssue, project_key: str) -> 'JiraTask':
         """从SonarQube问题创建Jira任务"""
-        summary = f"[SonarQube Critical] {sonar_issue.rule}: {sonar_issue.get_file_path()}"
+        summary = f"{Config.JIRA_TASK_PREFIX} {sonar_issue.get_file_path()}: {sonar_issue.message}"
 
         description = f"""
 *SonarQube Critical Issue 自动创建任务*
