@@ -12,6 +12,7 @@ class Config:
     # SonarQube配置
     SONARQUBE_URL = os.getenv('SONARQUBE_URL')
     SONARQUBE_TOKEN = os.getenv('SONARQUBE_TOKEN')
+    SONARQUBE_FETCH_CODE_SNIPPET = os.getenv('SONARQUBE_FETCH_CODE_SNIPPET', 'true').lower() == 'true'
 
     # Jira配置
     JIRA_URL = os.getenv('JIRA_URL')

@@ -20,6 +20,7 @@ class SonarIssue:
     debt: Optional[str]
     effort: Optional[str]
     tags: List[str]
+    code_snippet: Optional[str] = None  # 从SonarQube获取的代码片段
 
     @classmethod
     def from_sonar_response(cls, issue_data: Dict[str, Any]) -> 'SonarIssue':
@@ -76,36 +77,53 @@ class JiraTask:
         """从SonarQube问题创建Jira任务"""
         summary = f"{Config.JIRA_TASK_PREFIX} {sonar_issue.get_file_path()}: {sonar_issue.message}"
 
-        description = f"""
-*SonarQube Critical Issue 自动创建任务*
+        # 构建基础描述
+        description_parts = [
+            "*[质量管理] Critical Issue 自动创建任务*",
+            "",
+            "*SonarQube问题Key:*",
+            sonar_issue.key,
+            "",
+            "*问题描述:*",
+            sonar_issue.message,
+            "",
+            "*受影响文件:*",
+            sonar_issue.get_location_info(),
+        ]
 
-*问题描述:*
-{sonar_issue.message}
+        # 根据配置决定是否包含代码片段
+        if Config.JIRA_INCLUDE_CODE_SNIPPET:
+            description_parts.extend([
+                "",
+                "*受影响代码:*",
+                "{code}",
+                sonar_issue.code_snippet,
+                "{code}",
+            ])
 
-*受影响文件:*
-{sonar_issue.get_location_info()}
+        # 添加其他信息
+        description_parts.extend([
+            "",
+            "*问题严重等级:*",
+            sonar_issue.severity,
+            "",
+            "*相关项目:*",
+            sonar_issue.project,
+            "",
+            "*规则:*",
+            sonar_issue.rule,
+            "",
+            "*问题类型:*",
+            sonar_issue.type,
+            "",
+            "*创建时间:*",
+            sonar_issue.creation_date,
+            "",
+            "*标签:*",
+            ', '.join(sonar_issue.tags) if sonar_issue.tags else '无'
+        ])
 
-*问题严重等级:*
-{sonar_issue.severity}
-
-*相关项目:*
-{sonar_issue.project}
-
-*规则:*
-{sonar_issue.rule}
-
-*问题类型:*
-{sonar_issue.type}
-
-*创建时间:*
-{sonar_issue.creation_date}
-
-*SonarQube链接:*
-{sonar_issue.key}
-
-*标签:*
-{', '.join(sonar_issue.tags) if sonar_issue.tags else '无'}
-        """.strip()
+        description = '\n'.join(description_parts)
 
         labels = ["sonarqube", "critical", "automated"] + sonar_issue.tags
 
