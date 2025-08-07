@@ -9,21 +9,14 @@ import sys
 from datetime import datetime
 from typing import List, Dict, Any
 
-from core.config import Config
-from clients.sonarqube_client import SonarQubeClient
-from clients.jira_client import JiraClient
-from core.models import SonarIssue, JiraTask
-from utils.project_db import ProjectStatusDB
+from .core.config import Config
+from .clients.sonarqube_client import SonarQubeClient
+from .clients.jira_client import JiraClient
+from .core.models import SonarIssue, JiraTask
+from .utils.project_db import ProjectStatusDB
 
-# 配置日志
-logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(f'sonar_to_jira_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
-    ]
-)
+# 配置日志（使用Config中的配置）
+Config.setup_logging()
 
 logger = logging.getLogger(__name__)
 
