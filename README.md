@@ -11,12 +11,14 @@
 - 🎯 交互式项目选择
 - 📈 项目问题统计和分析
 
-### 第一阶段：Jira任务创建
-- 🔍 自动获取SonarQube项目中的Critical问题
-- 📋 为每个问题在Jira中创建详细任务
-- 📊 生成处理报告
+### 第一阶段：Jira任务批量创建 ⭐ 升级!
+- 🔍 **批量扫描所有SonarQube Critical问题**
+- 📋 **按项目自动分组处理**
+- 🎯 **智能匹配或自动创建Jira项目**
+- 📊 为每个问题在Jira中创建详细任务
 - 🔄 避免重复创建任务
-- 📝 详细的日志记录
+- � 生成完整的批量处理报告
+- �📝 详细的日志记录和错误处理
 
 ### 第二阶段：LangChain风格AI自动修复 ⭐ NEW!
 - 🤖 使用**LangChain最佳实践**的专业提示词架构
@@ -254,13 +256,28 @@ SonarResolve/
 - Claude-3-Sonnet
 - Claude-3-Haiku
 
+## � 详细文档
+
+### 核心功能文档
+- 📋 **[SonarQube到Jira工作流程](docs/SONAR_TO_JIRA_WORKFLOW.md)** - 完整的批量处理流程说明
+- 🚀 **[快速开始指南](docs/QUICK_START_JIRA.md)** - 5分钟上手指南
+- 📊 **[工作流程图](docs/WORKFLOW_DIAGRAMS.md)** - 可视化流程图
+- �🔧 **[API调用示例](docs/API_EXAMPLES.md)** - 详细的API使用示例
+
+### 技术文档
+- 🎯 **[LangChain AI指南](docs/LANGCHAIN_AI_GUIDE.md)** - AI大模型集成说明
+- 📦 **[Poetry安装指南](docs/POETRY_GUIDE.md)** - 依赖管理详解
+- 🔄 **[Git自动发现](docs/GIT_AUTO_DISCOVERY.md)** - Git仓库自动匹配
+- 🏗️ **[项目结构说明](docs/PROJECT_STRUCTURE.md)** - 代码组织架构
+
 ## 🔧 工作流程
 
-### 第一阶段：Jira任务创建
-1. 连接SonarQube获取Critical问题
-2. 解析问题详情和位置信息
-3. 在Jira中创建结构化任务
-4. 生成处理报告
+### 第一阶段：批量Jira任务创建 ⭐ 升级!
+1. **批量扫描**：获取所有SonarQube Critical问题
+2. **智能分组**：按项目自动分组处理
+3. **项目匹配**：智能匹配或自动创建Jira项目
+4. **任务创建**：为每个问题创建详细Jira任务
+5. **报告生成**：生成完整的批量处理报告
 
 ### 第二阶段：AI自动修复
 1. 获取SonarQube Critical问题
