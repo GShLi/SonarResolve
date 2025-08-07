@@ -17,15 +17,15 @@ class SonarQubeClient:
         self.token = token
         self.session = requests.Session()
         self.session.auth = (token, '')
-    
+
     def _clean_html_tags(self, text: str) -> str:
         """清理HTML标签"""
         if not text:
             return ''
-        
+
         # 移除HTML标签
         clean_text = re.sub(r'<[^>]+>', '', text)
-        
+
         # 解码常见的HTML实体
         html_entities = {
             '&lt;': '<',
@@ -35,10 +35,10 @@ class SonarQubeClient:
             '&#39;': "'",
             '&nbsp;': ' '
         }
-        
+
         for entity, char in html_entities.items():
             clean_text = clean_text.replace(entity, char)
-        
+
         return clean_text
 
     def _make_request(self, endpoint: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -157,7 +157,7 @@ class SonarQubeClient:
         try:
             response = self._make_request('sources/show', params)
             sources = response.get('sources', [])
-            
+
             # 调试信息
             logger.debug(f"获取源代码 {component_key}: 返回 {len(sources)} 行")
             if sources and len(sources) > 0:
@@ -179,9 +179,9 @@ class SonarQubeClient:
                         # 其他格式的备用处理
                         line_number = 0
                         code_content = str(source_line)
-                    
+
                     code_lines.append(f"{line_number:4d}: {code_content}")
-                    
+
                 except Exception as parse_error:
                     logger.debug(f"解析源代码行失败: {parse_error}, source_line: {source_line}")
                     # 添加错误行但不中断处理
@@ -199,52 +199,127 @@ class SonarQubeClient:
         
         Args:
             issue_data: SonarQube问题数据
-            context_lines: 上下文行数
+            context_lines: 上下文行数（使用issue_snippets接口时此参数可能不生效）
             
         Returns:
             格式化的代码片段
         """
         try:
-            component_key = issue_data.get('component', '')
-            text_range = issue_data.get('textRange', {})
+            issue_key = issue_data.get('key', '')
 
-            if not text_range:
-                return "无具体行号信息"
+            if not issue_key:
+                return "无问题Key信息"
 
-            start_line = text_range.get('startLine', 0)
-            if not start_line:
-                return "无具体行号信息"
+            # 使用 sources/issue_snippets 接口直接获取问题代码片段
+            params = {'issueKey': issue_key}
 
-            # 计算获取代码的范围
-            from_line = max(1, start_line - context_lines)
-            to_line = start_line + context_lines
+            logger.debug(f"通过 issue_snippets 接口获取问题 {issue_key} 的代码片段...")
+            response = self._make_request('sources/issue_snippets', params)
 
-            # 获取源代码
-            code_lines = self.get_source_code(component_key, from_line, to_line)
+            # 解析返回的代码片段数据
+            # 响应格式: {"component_key": {"component": {...}, "sources": [{"line": 1, "code": "..."}]}}
 
-            if not code_lines:
-                return "无法获取源代码"
+            if not response:
+                logger.debug(f"问题 {issue_key} 没有返回代码片段数据")
+                return "无代码片段信息"
 
-            # 标记问题所在行
             formatted_lines = []
-            for line in code_lines:
-                line_parts = line.split(': ', 1)
-                if len(line_parts) == 2:
-                    line_num = int(line_parts[0].strip())
-                    line_content = line_parts[1]
 
-                    if line_num == start_line:
-                        formatted_lines.append(f"→ {line_num:4d}: {line_content}")
+            # 处理每个组件的代码片段
+            for component_key, component_data in response.items():
+                if not isinstance(component_data, dict):
+                    continue
+
+                # 获取组件信息
+                component_info = component_data.get('component', {})
+                component_path = component_info.get('path', component_key)
+
+                # 添加文件路径信息
+                if component_path:
+                    formatted_lines.append(f"文件: {component_path}")
+                    formatted_lines.append("=" * 50)
+
+                # 获取源代码行
+                sources = component_data.get('sources', [])
+
+                if not sources:
+                    formatted_lines.append("无源代码信息")
+                    continue
+
+                # 获取问题所在行号（用于标记）
+                text_range = issue_data.get('textRange', {})
+                problem_line = text_range.get('startLine', 0) if text_range else 0
+
+                # 格式化每一行代码
+                for source_item in sources:
+                    if isinstance(source_item, dict):
+                        line_number = source_item.get('line', 0)
+                        code_content = source_item.get('code', '')
+
+                        # 清理HTML标签
+                        clean_code = self._clean_html_tags(code_content)
+
+                        # 标记问题所在行
+                        if line_number == problem_line:
+                            formatted_lines.append(f"→ {line_number:4d}: {clean_code}")
+                        else:
+                            formatted_lines.append(f"  {line_number:4d}: {clean_code}")
                     else:
-                        formatted_lines.append(f"  {line_num:4d}: {line_content}")
-                else:
-                    formatted_lines.append(line)
+                        # 兼容处理其他格式
+                        formatted_lines.append(f"     : {str(source_item)}")
+
+            if not formatted_lines:
+                logger.debug(f"问题 {issue_key} 的代码片段解析后为空")
+                return "无法解析代码片段"
 
             return '\n'.join(formatted_lines)
 
         except Exception as e:
             logger.warning(f"获取问题代码片段失败: {e}")
-            return f"获取代码片段失败: {str(e)}"
+
+            # 如果新接口失败，回退到原来的方法
+            logger.debug("回退到使用 sources/show 接口...")
+            try:
+                component_key = issue_data.get('component', '')
+                text_range = issue_data.get('textRange', {})
+
+                if not text_range:
+                    return "无具体行号信息"
+
+                start_line = text_range.get('startLine', 0)
+                if not start_line:
+                    return "无具体行号信息"
+
+                # 计算获取代码的范围
+                from_line = max(1, start_line - context_lines)
+                to_line = start_line + context_lines
+
+                # 获取源代码
+                code_lines = self.get_source_code(component_key, from_line, to_line)
+
+                if not code_lines:
+                    return "无法获取源代码"
+
+                # 标记问题所在行
+                formatted_lines = []
+                for line in code_lines:
+                    line_parts = line.split(': ', 1)
+                    if len(line_parts) == 2:
+                        line_num = int(line_parts[0].strip())
+                        line_content = line_parts[1]
+
+                        if line_num == start_line:
+                            formatted_lines.append(f"→ {line_num:4d}: {line_content}")
+                        else:
+                            formatted_lines.append(f"  {line_num:4d}: {line_content}")
+                    else:
+                        formatted_lines.append(line)
+
+                return '\n'.join(formatted_lines)
+
+            except Exception as fallback_error:
+                logger.warning(f"回退方法也失败: {fallback_error}")
+                return f"获取代码片段失败: {str(e)}"
 
     def test_connection(self) -> bool:
         """测试SonarQube连接"""
