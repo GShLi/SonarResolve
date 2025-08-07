@@ -191,17 +191,32 @@ class JiraClient:
             
             # 2. 如果缓存中没有记录，从Jira API查询
             logger.debug(f"向Jira API查询任务 {sonar_issue.key} 是否存在...")
-            jql = f'project = {project_key} AND summary ~ "{sonar_issue.key}"'
-            issues = self.jira.search_issues(jql, maxResults=1)
+            # 在description中查询SonarQube问题的key，使用精确匹配
+            # 假设description中包含类似 "SonarQube问题: ISSUE-KEY" 的格式
+            jql = f'project = {project_key} AND (description ~ "{sonar_issue.key}" OR summary ~ "{sonar_issue.key}")'
+            issues = self.jira.search_issues(jql, maxResults=5)
             
-            task_exists = len(issues) > 0
+            # 进一步验证找到的任务是否真的对应这个SonarQube问题
+            task_exists = False
+            existing_task = None
+            
+            for issue in issues:
+                # 检查description或summary中是否包含完整的SonarQube问题key
+                description = getattr(issue.fields, 'description', '') or ''
+                summary = getattr(issue.fields, 'summary', '') or ''
+                
+                if sonar_issue.key in description or sonar_issue.key in summary:
+                    task_exists = True
+                    existing_task = issue
+                    logger.debug(f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}")
+                    break
+            
             if task_exists:
                 logger.info(f"Jira API查询发现任务已存在: {sonar_issue.key}")
                 
                 # 如果从Jira API发现任务存在，但缓存中没有记录，补充记录到缓存
-                if self.project_db and issues:
+                if self.project_db and existing_task:
                     try:
-                        existing_task = issues[0]
                         # 找到SonarQube项目key（从任务所属项目推断）
                         sonar_project_key = sonar_issue.project
                         
