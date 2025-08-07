@@ -91,6 +91,13 @@ class SonarQubeClient:
                     # 创建SonarIssue对象
                     sonar_issue = SonarIssue.from_sonar_response(issue_data)
 
+                    # 获取规则描述信息
+                    rule_key = issue_data.get('rule', '')
+                    if rule_key:
+                        rule_info = self.get_rule_info(rule_key)
+                        sonar_issue.rule_info = rule_info
+                        logger.debug(f"为问题 {sonar_issue.key} 添加规则信息: {rule_key}")
+
                     # 根据配置决定是否获取代码片段
                     if Config.SONARQUBE_FETCH_CODE_SNIPPET:
                         code_snippet = self.get_issue_code_snippet(issue_data)
@@ -123,6 +130,53 @@ class SonarQubeClient:
         else:
             logger.info(f"所有项目总共获取到 {len(issues)} 个Critical问题")
         return issues
+
+    def get_rule_info(self, rule_key: str) -> Dict[str, Any]:
+        """
+        获取规则信息
+        
+        Args:
+            rule_key: 规则Key
+            
+        Returns:
+            规则信息字典
+        """
+        try:
+            params = {'key': rule_key}
+
+            logger.debug(f"获取规则信息: {rule_key}")
+            response = self._make_request('rules/show', params)
+
+            rule_data = response.get('rule', {})
+
+            # 提取有用的规则信息
+            rule_info = {
+                'key': rule_data.get('key', ''),
+                'name': rule_data.get('name', ''),
+                'description': rule_data.get('htmlDesc', '') or rule_data.get('mdDesc', ''),
+                'severity': rule_data.get('severity', ''),
+                'type': rule_data.get('type', ''),
+                'language': rule_data.get('lang', ''),
+                'tags': rule_data.get('tags', [])
+            }
+
+            # 清理HTML描述
+            if rule_info['description']:
+                rule_info['description'] = self._clean_html_tags(rule_info['description'])
+
+            return rule_info
+
+        except Exception as e:
+            logger.warning(f"获取规则信息失败 {rule_key}: {e}")
+            return {
+                'key': rule_key,
+                'name': '',
+                'description': '无法获取规则描述',
+                'severity': '',
+                'type': '',
+                'language': '',
+                'tags': []
+            }
 
     def get_project_info(self, project_key: str) -> Dict[str, Any]:
         """获取项目信息"""

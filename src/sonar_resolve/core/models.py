@@ -21,6 +21,7 @@ class SonarIssue:
     effort: Optional[str]
     tags: List[str]
     code_snippet: Optional[str] = None  # 从SonarQube获取的代码片段
+    rule_info: Optional[Dict[str, Any]] = None  # 规则详细信息
 
     @classmethod
     def from_sonar_response(cls, issue_data: Dict[str, Any]) -> 'SonarIssue':
@@ -112,6 +113,19 @@ class JiraTask:
             "",
             "*规则:*",
             sonar_issue.rule,
+        ])
+
+        # 如果有规则详细信息，添加规则描述
+        if sonar_issue.rule_info:
+            rule_info = sonar_issue.rule_info
+            if rule_info.get('description'):
+                description_parts.extend([
+                    "",
+                    "*问题描述:*",
+                    rule_info['description']
+                ])
+
+        description_parts.extend([
             "",
             "*问题类型:*",
             sonar_issue.type,
