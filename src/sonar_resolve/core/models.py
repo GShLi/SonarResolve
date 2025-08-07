@@ -131,7 +131,7 @@ class JiraTask:
             summary=summary,
             description=description,
             project_key=project_key,
-            issue_type="Task",
-            priority="High",
+            issue_type="Bug",
+            priority="Major",
             labels=labels
         )

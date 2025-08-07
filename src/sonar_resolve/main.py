@@ -168,7 +168,7 @@ class SonarToJiraProcessor:
             # 创建Jira项目
             success = self.jira_client.create_project(
                 key=jira_project_key,
-                name=f"[SonarQube] {jira_project_name}",
+                name=f"{jira_project_name}",
                 description=f"自动创建的项目，用于管理SonarQube项目 {sonar_project_key} 的Critical问题"
             )
 
