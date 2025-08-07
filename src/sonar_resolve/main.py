@@ -44,16 +44,15 @@ class SonarToJiraProcessor:
             Config.SONARQUBE_URL,
             Config.SONARQUBE_TOKEN
         )
-
-        self.jira_client = JiraClient(
-            Config.JIRA_URL,
-            Config.JIRA_API_TOKEN
-        )
-
+        
         # 初始化项目状态数据库（本地缓存）
         self.project_db = ProjectStatusDB()
-
-        # 清理过期的缓存记录
+        
+        self.jira_client = JiraClient(
+            Config.JIRA_URL,
+            Config.JIRA_API_TOKEN,
+            project_db=self.project_db  # 传入数据库实例以支持缓存查询
+        )        # 清理过期的缓存记录
         try:
             cleaned_count = self.project_db.cleanup_old_records()
             if cleaned_count > 0:
