@@ -1,5 +1,6 @@
 import requests
 import logging
+import re
 from typing import List, Dict, Any
 from urllib.parse import urljoin
 from src.sonar_resolve.core.models import SonarIssue
@@ -16,6 +17,29 @@ class SonarQubeClient:
         self.token = token
         self.session = requests.Session()
         self.session.auth = (token, '')
+    
+    def _clean_html_tags(self, text: str) -> str:
+        """清理HTML标签"""
+        if not text:
+            return ''
+        
+        # 移除HTML标签
+        clean_text = re.sub(r'<[^>]+>', '', text)
+        
+        # 解码常见的HTML实体
+        html_entities = {
+            '&lt;': '<',
+            '&gt;': '>',
+            '&amp;': '&',
+            '&quot;': '"',
+            '&#39;': "'",
+            '&nbsp;': ' '
+        }
+        
+        for entity, char in html_entities.items():
+            clean_text = clean_text.replace(entity, char)
+        
+        return clean_text
 
     def _make_request(self, endpoint: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """发送API请求"""
@@ -133,13 +157,35 @@ class SonarQubeClient:
         try:
             response = self._make_request('sources/show', params)
             sources = response.get('sources', [])
+            
+            # 调试信息
+            logger.debug(f"获取源代码 {component_key}: 返回 {len(sources)} 行")
+            if sources and len(sources) > 0:
+                logger.debug(f"第一行格式示例: {type(sources[0])}: {sources[0]}")
 
             # 提取代码行
             code_lines = []
             for source_line in sources:
-                line_number = source_line.get('line', 0)
-                code_content = source_line.get('code', '')
-                code_lines.append(f"{line_number:4d}: {code_content}")
+                try:
+                    # source_line 是一个数组：[行号, 包含HTML标签的代码字符串]
+                    if isinstance(source_line, list) and len(source_line) >= 2:
+                        line_number = source_line[0]
+                        code_content = self._clean_html_tags(source_line[1])
+                    elif isinstance(source_line, dict):
+                        # 备用处理：如果是字典格式
+                        line_number = source_line.get('line', 0)
+                        code_content = self._clean_html_tags(source_line.get('code', ''))
+                    else:
+                        # 其他格式的备用处理
+                        line_number = 0
+                        code_content = str(source_line)
+                    
+                    code_lines.append(f"{line_number:4d}: {code_content}")
+                    
+                except Exception as parse_error:
+                    logger.debug(f"解析源代码行失败: {parse_error}, source_line: {source_line}")
+                    # 添加错误行但不中断处理
+                    code_lines.append(f"   ?: {str(source_line)}")
 
             return code_lines
 
