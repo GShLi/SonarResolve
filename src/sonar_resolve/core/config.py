@@ -17,6 +17,7 @@ class Config:
     JIRA_URL = os.getenv('JIRA_URL')
     JIRA_PROJECT_LEAD = os.getenv('JIRA_PROJECT_LEAD')
     JIRA_API_TOKEN = os.getenv('JIRA_API_TOKEN')
+    JIRA_TASK_PREFIX = os.getenv('JIRA_TASK_PREFIX', '[质量管理]')
 
     # GitLab配置（用于仓库管理和Merge Request）
     GITLAB_URL = os.getenv('GITLAB_URL')
