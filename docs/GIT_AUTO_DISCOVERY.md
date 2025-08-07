@@ -36,9 +36,9 @@ LOCAL_WORKSPACE=/path/to/local/workspace  # 例如: C:\workspace 或 ./workspace
 
 ### 1. 项目仓库准备
 ```python
-from src.sonar_resolve.utils.git_manager import GitRepositoryManager
+from src.sonar_resolve.utils.git_manager import GitClient
 
-repo_manager = GitRepositoryManager()
+repo_manager = GitClient()
 
 # 根据SonarQube项目名准备仓库
 success, local_path, repo_info = repo_manager.prepare_repository_for_project("my-project")

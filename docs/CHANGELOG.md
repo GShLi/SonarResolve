@@ -10,7 +10,7 @@
 - **新增**: 自动克隆仓库到本地工作目录
 - **新增**: 每次运行前自动执行git pull确保代码最新
 - **新增**: 多项目支持，可同时管理多个仓库
-- **新增**: `GitRepositoryManager` 类用于统一仓库管理
+- **新增**: `GitClient` 类用于统一仓库管理
 - **新增**: `AutoFixProcessor` 类用于自动化修复流程
 
 #### 配置简化
@@ -95,9 +95,9 @@ git_manager.py → src/sonar_resolve/utils/git_manager.py
 
 #### 自动仓库管理
 ```python
-from src.sonar_resolve.utils.git_manager import GitRepositoryManager
+from src.sonar_resolve.utils.git_manager import GitClient
 
-repo_manager = GitRepositoryManager()
+repo_manager = GitClient()
 
 # 自动发现并准备仓库
 success, local_path, repo_info = repo_manager.prepare_repository_for_project("my-project")
