@@ -2,8 +2,8 @@ import os
 import logging
 from typing import List, Dict, Any, Optional
 from abc import ABC, abstractmethod
-from ..core.models import SonarIssue
-from ..core.config import Config
+from src.sonar_resolve.core.models import SonarIssue
+from src.sonar_resolve.core.config import Config
 
 # 尝试导入LangChain（可选）
 try:

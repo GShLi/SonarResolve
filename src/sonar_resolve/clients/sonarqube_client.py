@@ -1,9 +1,8 @@
 import requests
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from urllib.parse import urljoin
-from ..core.models import SonarIssue
-from ..core.config import Config
+from src.sonar_resolve.core.models import SonarIssue
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +27,34 @@ class SonarQubeClient:
             logger.error(f"SonarQube API请求失败: {e}")
             raise
     
-    def get_critical_issues(self, project_key: str, page_size: int = 500) -> List[SonarIssue]:
-        """获取项目中所有Critical级别的问题"""
+    def get_critical_issues(self, project_key: str = None, page_size: int = 500) -> List[SonarIssue]:
+        """
+        获取Critical级别的问题
+        
+        Args:
+            project_key: 项目Key，如果为None则获取所有项目的Critical问题
+            page_size: 每页大小
+            
+        Returns:
+            SonarIssue对象列表
+        """
         issues = []
         page = 1
         
         while True:
             params = {
-                'componentKeys': project_key,
                 'severities': 'CRITICAL',
                 'statuses': 'OPEN,CONFIRMED,REOPENED',
                 'ps': page_size,
                 'p': page
             }
             
-            logger.info(f"获取第 {page} 页的Critical问题...")
+            # 如果指定了项目，则只查询该项目
+            if project_key:
+                params['componentKeys'] = project_key
+                logger.info(f"获取项目 {project_key} 第 {page} 页的Critical问题...")
+            else:
+                logger.info(f"获取所有项目第 {page} 页的Critical问题...")
             
             try:
                 response = self._make_request('issues/search', params)
@@ -59,7 +71,10 @@ class SonarQubeClient:
                 total = response.get('total', 0)
                 current_count = len(issues)
                 
-                logger.info(f"已获取 {current_count}/{total} 个Critical问题")
+                if project_key:
+                    logger.info(f"项目 {project_key} 已获取 {current_count}/{total} 个Critical问题")
+                else:
+                    logger.info(f"已获取 {current_count}/{total} 个Critical问题")
                 
                 if current_count >= total:
                     break
@@ -70,7 +85,10 @@ class SonarQubeClient:
                 logger.error(f"获取Critical问题失败: {e}")
                 raise
         
-        logger.info(f"总共获取到 {len(issues)} 个Critical问题")
+        if project_key:
+            logger.info(f"项目 {project_key} 总共获取到 {len(issues)} 个Critical问题")
+        else:
+            logger.info(f"所有项目总共获取到 {len(issues)} 个Critical问题")
         return issues
     
     def get_project_info(self, project_key: str) -> Dict[str, Any]:

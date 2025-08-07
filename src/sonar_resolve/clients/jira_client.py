@@ -2,22 +2,21 @@ import re
 from jira import JIRA
 import logging
 from typing import List, Dict, Any, Optional
-from ..core.models import JiraTask, SonarIssue
-from ..core.config import Config
+from src.sonar_resolve.core.models import JiraTask, SonarIssue
+from src.sonar_resolve.core.config import Config
 
 logger = logging.getLogger(__name__)
 
 class JiraClient:
     """Jira API客户端"""
     
-    def __init__(self, server: str, username: str, password: str):
+    def __init__(self, server: str, token: str):
         self.server = server
-        self.username = username
         
         try:
             self.jira = JIRA(
                 server=server,
-                basic_auth=(username, password)
+                token_auth=token,
             )
             logger.info("Jira客户端初始化成功")
         except Exception as e:
@@ -200,3 +199,143 @@ class JiraClient:
         except Exception as e:
             logger.error(f"获取Jira项目信息失败: {e}")
             return None
+    
+    def get_all_projects(self) -> List[Dict[str, Any]]:
+        """获取所有Jira项目"""
+        try:
+            projects = self.jira.projects()
+            project_list = []
+            
+            for project in projects:
+                project_list.append({
+                    'key': project.key,
+                    'name': project.name,
+                    'id': project.id,
+                    'lead': project.lead.displayName if hasattr(project, 'lead') and project.lead else None
+                })
+            
+            logger.info(f"获取到 {len(project_list)} 个Jira项目")
+            return project_list
+            
+        except Exception as e:
+            logger.error(f"获取Jira项目列表失败: {e}")
+            return []
+    
+    def create_project(self, key: str, name: str, description: str = "", 
+                      project_type: str = "software", lead: str = None) -> bool:
+        """
+        创建Jira项目
+        
+        Args:
+            key: 项目key
+            name: 项目名称
+            description: 项目描述
+            project_type: 项目类型，默认为'software'
+            lead: 项目负责人，默认为当前用户
+            
+        Returns:
+            bool: 创建是否成功
+        """
+        try:
+            # 检查项目是否已存在
+            try:
+                existing_project = self.jira.project(key)
+                if existing_project:
+                    logger.info(f"项目 {key} 已存在，跳过创建")
+                    return True
+            except:
+                # 项目不存在，继续创建
+                pass
+            
+            # 如果没有指定负责人，使用当前用户
+            if not lead:
+                try:
+                    current_user = self.jira.current_user()
+                    lead = current_user
+                except Exception as e:
+                    logger.warning(f"无法获取当前用户作为项目负责人: {e}")
+                    # 尝试使用配置中的用户名
+                    lead = Config.JIRA_PROJECT_LEAD
+            
+            # 获取项目模板
+            project_templates = []
+            try:
+                # 尝试获取可用的项目模板
+                templates_response = self.jira._session.get(
+                    f"{self.jira._options['server']}/rest/api/2/project/template"
+                )
+                if templates_response.status_code == 200:
+                    project_templates = templates_response.json()
+            except Exception as e:
+                logger.debug(f"获取项目模板失败: {e}")
+            
+            # 选择一个合适的模板
+            template_key = None
+            if project_templates:
+                # 优先选择软件项目模板
+                for template in project_templates:
+                    if 'software' in template.get('name', '').lower() or \
+                       'scrum' in template.get('name', '').lower():
+                        template_key = template.get('projectTemplateKey')
+                        break
+                
+                # 如果没找到软件模板，使用第一个可用模板
+                if not template_key and project_templates:
+                    template_key = project_templates[0].get('projectTemplateKey')
+            
+            # 准备创建项目的参数
+            project_data = {
+                'key': key,
+                'name': name,
+                'description': description,
+                'lead': lead,
+                'assigneeType': 'PROJECT_LEAD'
+            }
+            
+            # 如果有模板，使用模板创建
+            if template_key:
+                project_data['projectTemplateKey'] = template_key
+                logger.info(f"使用模板 {template_key} 创建项目")
+            
+            # 方法1：尝试使用JIRA库的create_project方法
+            try:
+                new_project = self.jira.create_project(
+                    key=key,
+                    name=name,
+                    lead=lead,
+                    description=description
+                )
+                logger.info(f"成功创建Jira项目: {key} - {name}")
+                return True
+                
+            except Exception as e1:
+                logger.debug(f"方法1创建项目失败: {e1}")
+                
+                # 方法2：使用REST API直接创建
+                try:
+                    create_url = f"{self.jira._options['server']}/rest/api/2/project"
+                    response = self.jira._session.post(create_url, json=project_data)
+                    
+                    if response.status_code in [200, 201]:
+                        logger.info(f"成功创建Jira项目: {key} - {name}")
+                        return True
+                    else:
+                        logger.error(f"创建项目失败，状态码: {response.status_code}")
+                        logger.error(f"响应内容: {response.text}")
+                        return False
+                        
+                except Exception as e2:
+                    logger.error(f"方法2创建项目失败: {e2}")
+                    return False
+            
+        except Exception as e:
+            logger.error(f"创建Jira项目失败: {e}")
+            return False
+    
+    def project_exists(self, project_key: str) -> bool:
+        """检查项目是否存在"""
+        try:
+            self.jira.project(project_key)
+            return True
+        except:
+            return False

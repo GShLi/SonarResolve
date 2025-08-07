@@ -23,7 +23,7 @@ from ..core.config import Config
 
 logger = logging.getLogger(__name__)
 
-class GitRepositoryManager:
+class GitClient:
     """Git仓库管理器 - 自动发现和管理仓库"""
     
     def __init__(self):
@@ -263,7 +263,7 @@ class GitManager:
     
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
-        self.repo_manager = GitRepositoryManager()
+        self.repo_manager = GitClient()
     
     def create_branch(self, branch_name: str) -> bool:
         """创建并切换到新分支"""
@@ -349,7 +349,7 @@ class AutoFixProcessor:
     """自动修复处理器"""
     
     def __init__(self):
-        self.repo_manager = GitRepositoryManager()
+        self.repo_manager = GitClient()
     
     def process_project_fixes(self, project_name: str, fixes: list) -> bool:
         """处理项目的自动修复"""
@@ -441,7 +441,7 @@ class GitLabManager:
             raise ValueError("GitLab token未配置或库未安装")
     
     def create_merge_request(self, project_id: str, source_branch: str, target_branch: str = 'main', 
-                           title: str = None, description: str = None) -> Optional[Dict[str, Any]]:
+                           title: str = None, description: str = None, labels: list = None) -> Optional[Dict[str, Any]]:
         """创建Merge Request"""
         try:
             project = self.gitlab_client.projects.get(project_id)
@@ -450,8 +450,13 @@ class GitLabManager:
                 'source_branch': source_branch,
                 'target_branch': target_branch,
                 'title': title or f"自动修复: {source_branch}",
-                'description': description or "SonarQube Critical问题自动修复"
+                'description': description or "SonarQube Critical问题自动修复",
+                'remove_source_branch': True
             }
+            
+            # 添加标签支持
+            if labels:
+                mr_data['labels'] = labels
             
             mr = project.mergerequests.create(mr_data)
             
