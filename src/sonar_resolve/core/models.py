@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+
 @dataclass
 class SonarIssue:
     """SonarQube问题数据模型"""
@@ -19,12 +20,12 @@ class SonarIssue:
     debt: Optional[str]
     effort: Optional[str]
     tags: List[str]
-    
+
     @classmethod
     def from_sonar_response(cls, issue_data: Dict[str, Any]) -> 'SonarIssue':
         """从SonarQube API响应创建SonarIssue对象"""
         text_range = issue_data.get('textRange', {})
-        
+
         return cls(
             key=issue_data.get('key', ''),
             component=issue_data.get('component', ''),
@@ -41,19 +42,20 @@ class SonarIssue:
             effort=issue_data.get('effort'),
             tags=issue_data.get('tags', [])
         )
-    
+
     def get_file_path(self) -> str:
         """获取文件路径（去除项目前缀）"""
         if ':' in self.component:
             return self.component.split(':', 1)[1]
         return self.component
-    
+
     def get_location_info(self) -> str:
         """获取位置信息"""
         file_path = self.get_file_path()
         if self.line:
             return f"{file_path}:{self.line}"
         return file_path
+
 
 @dataclass
 class JiraTask:
@@ -64,16 +66,16 @@ class JiraTask:
     issue_type: str = "Task"
     priority: str = "High"
     labels: List[str] = None
-    
+
     def __post_init__(self):
         if self.labels is None:
             self.labels = []
-    
+
     @classmethod
     def from_sonar_issue(cls, sonar_issue: SonarIssue, project_key: str) -> 'JiraTask':
         """从SonarQube问题创建Jira任务"""
         summary = f"[SonarQube Critical] {sonar_issue.rule}: {sonar_issue.get_file_path()}"
-        
+
         description = f"""
 *SonarQube Critical Issue 自动创建任务*
 
@@ -104,9 +106,9 @@ class JiraTask:
 *标签:*
 {', '.join(sonar_issue.tags) if sonar_issue.tags else '无'}
         """.strip()
-        
+
         labels = ["sonarqube", "critical", "automated"] + sonar_issue.tags
-        
+
         return cls(
             summary=summary,
             description=description,
