@@ -40,6 +40,10 @@ class Config:
     # 日志配置
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
+    # 数据库配置
+    DATABASE_PATH = os.getenv('DATABASE_PATH', os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'db', 'project_status.db'))
+    DATABASE_BACKUP = os.getenv('DATABASE_BACKUP', 'false').lower() == 'true'
+
     @classmethod
     def validate_config(cls) -> bool:
         """验证配置是否完整"""

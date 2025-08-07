@@ -10,14 +10,29 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 import threading
+import os
 
 logger = logging.getLogger(__name__)
 
 class ProjectStatusDB:
     """项目状态数据库管理器"""
     
-    def __init__(self, db_path: str = "project_status.db"):
+    def __init__(self, db_path: str = None):
+        # 如果没有指定路径，使用配置中的默认路径
+        if db_path is None:
+            try:
+                from ..core.config import Config
+                db_path = Config.DATABASE_PATH
+            except ImportError:
+                # 如果无法导入配置，使用默认路径
+                project_root = Path(__file__).parent.parent.parent.parent
+                db_path = project_root / 'db' / 'project_status.db'
+        
         self.db_path = Path(db_path)
+        
+        # 确保数据库目录存在
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        
         self.lock = threading.Lock()
         self._init_database()
     
@@ -68,11 +83,36 @@ class ProjectStatusDB:
                 ''')
                 
                 conn.commit()
-                logger.info("数据库初始化完成")
+                logger.info(f"数据库初始化完成: {self.db_path}")
                 
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")
             raise
+    
+    def get_database_info(self) -> Dict[str, Any]:
+        """
+        获取数据库基本信息
+        
+        Returns:
+            数据库信息字典
+        """
+        try:
+            db_info = {
+                'database_path': str(self.db_path.absolute()),
+                'database_exists': self.db_path.exists(),
+                'database_size': 0,
+                'database_directory': str(self.db_path.parent.absolute()),
+                'directory_exists': self.db_path.parent.exists()
+            }
+            
+            if self.db_path.exists():
+                db_info['database_size'] = self.db_path.stat().st_size
+                
+            return db_info
+            
+        except Exception as e:
+            logger.error(f"获取数据库信息失败: {e}")
+            return {}
     
     def is_project_created(self, sonar_project_key: str) -> Optional[str]:
         """
@@ -369,6 +409,7 @@ class ProjectStatusDB:
         try:
             project_stats = self.get_project_statistics()
             task_stats = self.get_task_statistics()
+            db_info = self.get_database_info()
             
             return {
                 'database_stats': {
@@ -377,8 +418,10 @@ class ProjectStatusDB:
                     'daily_project_creation': project_stats.get('daily_creation_stats', []),
                     'tasks_by_project': task_stats.get('tasks_by_project', [])
                 },
+                'database_info': db_info,
                 'summary': {
-                    'database_file': str(self.db_path),
+                    'database_file': str(self.db_path.absolute()),
+                    'database_directory': str(self.db_path.parent.absolute()),
                     'created_at': datetime.now().isoformat()
                 }
             }

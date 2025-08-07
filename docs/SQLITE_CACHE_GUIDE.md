@@ -124,7 +124,45 @@ for project in projects:
     print(f"{project['sonar_project_key']} -> {project['jira_project_key']}")
 ```
 
-## 配置选项
+## 配置数据库存储位置
+
+### 默认存储位置
+
+数据库文件默认存储在项目根目录的 `db/` 文件夹中：
+```
+SonarResolve/
+├── db/
+│   └── project_status.db     # SQLite数据库文件
+├── src/
+├── docs/
+└── ...
+```
+
+### 自定义存储位置
+
+可以通过环境变量 `DATABASE_PATH` 自定义数据库存储位置：
+
+```env
+# 使用相对路径（基于项目根目录）
+DATABASE_PATH=data/cache/sonar_cache.db
+
+# 使用绝对路径
+DATABASE_PATH=/var/lib/sonar_resolve/project_status.db
+
+# Windows绝对路径
+DATABASE_PATH=C:\ProgramData\SonarResolve\project_status.db
+```
+
+### 自动目录创建
+
+系统会自动创建数据库文件所需的目录结构，无需手动创建。
+
+### 数据库备份
+
+可以启用自动备份功能：
+```env
+DATABASE_BACKUP=true
+```选项
 
 ### 数据库文件位置
 默认数据库文件位于当前工作目录下的`project_status.db`，可以通过参数指定：

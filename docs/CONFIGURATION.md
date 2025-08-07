@@ -68,8 +68,10 @@ SonarResolve 使用环境变量进行配置管理，支持灵活的配置选项�
 
 | 参数 | 必需 | 描述 | 示例 |
 |------|------|------|------|
-| `DATABASE_PATH` | ❌ | SQLite数据库路径 | `project_status.db` |
+| `DATABASE_PATH` | ❌ | SQLite数据库文件路径 | `db/project_status.db` (默认: `db/project_status.db`) |
 | `DATABASE_BACKUP` | ❌ | 是否自动备份数据库 | `true` (默认: `false`) |
+
+**注意**: 数据库路径可以是相对路径或绝对路径。相对路径基于项目根目录。
 
 ## 🔧 配置文件示例
 
@@ -132,7 +134,7 @@ LOG_MAX_SIZE=10
 LOG_BACKUP_COUNT=5
 
 # =================== 数据库配置 ===================
-DATABASE_PATH=data/project_status.db
+DATABASE_PATH=db/project_status.db
 DATABASE_BACKUP=true
 ```
 
