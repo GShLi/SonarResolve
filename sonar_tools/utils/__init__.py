@@ -6,6 +6,6 @@
 - 其他工具函数
 """
 
-from src.sonar_resolve.utils.project_db import ProjectStatusDB
+from src.sonar_tools.utils.project_db import ProjectStatusDB
 
 __all__ = ["ProjectStatusDB"]

@@ -18,16 +18,16 @@ __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
 # 核心组件导入
-from src.sonar_resolve.core.config import Config
-from src.sonar_resolve.core.models import SonarIssue, JiraTask
+from src.sonar_tools.core.config import Config
+from src.sonar_tools.core.models import SonarIssue, JiraTask
 
 # 客户端导入
-from src.sonar_resolve.clients.sonarqube_client import SonarQubeClient
-from src.sonar_resolve.clients.jira_client import JiraClient
-from src.sonar_resolve.clients.ai_client import AIClient
+from src.sonar_tools.clients.sonarqube_client import SonarQubeClient
+from src.sonar_tools.clients.jira_client import JiraClient
+from src.sonar_tools.clients.ai_client import AIClient
 
 # 主要功能导入
-from src.sonar_resolve.auto_fix import SonarAutoFixProcessor
+from src.sonar_tools.auto_fix import SonarAutoFixProcessor
 
 __all__ = [
     # 版本信息

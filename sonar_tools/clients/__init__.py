@@ -7,8 +7,8 @@
 - AIClient: AI服务客户端
 """
 
-from src.sonar_resolve.clients.sonarqube_client import SonarQubeClient
-from src.sonar_resolve.clients.jira_client import JiraClient
-from src.sonar_resolve.clients.ai_client import AIClient
+from src.sonar_tools.clients.sonarqube_client import SonarQubeClient
+from src.sonar_tools.clients.jira_client import JiraClient
+from src.sonar_tools.clients.ai_client import AIClient
 
 __all__ = ["SonarQubeClient", "JiraClient", "AIClient"]

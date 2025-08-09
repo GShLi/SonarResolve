@@ -2,8 +2,8 @@ import re
 from jira import JIRA
 import logging
 from typing import List, Dict, Any, Optional
-from src.sonar_resolve.core.models import JiraTask, SonarIssue
-from src.sonar_resolve.core.config import Config
+from src.sonar_tools.core.models import JiraTask, SonarIssue
+from src.sonar_tools.core.config import Config
 
 logger = logging.getLogger(__name__)
 

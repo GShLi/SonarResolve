@@ -3,8 +3,8 @@ import logging
 import re
 from typing import List, Dict, Any
 from urllib.parse import urljoin
-from src.sonar_resolve.core.models import SonarIssue
-from src.sonar_resolve.core.config import Config
+from src.sonar_tools.core.models import SonarIssue
+from src.sonar_tools.core.config import Config
 
 logger = logging.getLogger(__name__)
 
