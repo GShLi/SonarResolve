@@ -35,8 +35,9 @@ LOCAL_WORKSPACE=/path/to/local/workspace  # 例如: C:\workspace 或 ./workspace
 ## 工作流程
 
 ### 1. 项目仓库准备
+
 ```python
-from src.sonar_resolve.utils.git_manager import GitClient
+from sonar_tools.utils.git_manager import GitClient
 
 repo_manager = GitClient()
 
@@ -96,8 +97,9 @@ LOCAL_WORKSPACE/
 ## 自动修复流程
 
 ### 1. 使用AutoFixProcessor
+
 ```python
-from src.sonar_resolve.utils.git_manager import AutoFixProcessor
+from sonar_tools.utils.git_manager import AutoFixProcessor
 
 processor = AutoFixProcessor()
 

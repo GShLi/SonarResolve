@@ -105,8 +105,9 @@ AI_MODEL=gpt-4                        # 具体模型
 ## 🚀 使用示例
 
 ### 基本使用
+
 ```python
-from src.sonar_resolve.clients.ai_client import AIClientFactory
+from sonar_tools.clients.ai_client import AIClientFactory
 
 # 自动创建AI客户端
 ai_client = AIClientFactory.create_client()
@@ -116,8 +117,9 @@ fixed_content = ai_client.fix_code_issue(sonar_issue, file_content)
 ```
 
 ### 批量修复
+
 ```python
-from src.sonar_resolve.clients.ai_client import CodeFixer
+from sonar_tools.clients.ai_client import CodeFixer
 
 fixer = CodeFixer()
 fixes = fixer.fix_multiple_issues(sonar_issues, repository_path)

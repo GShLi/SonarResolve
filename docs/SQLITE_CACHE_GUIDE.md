@@ -65,7 +65,7 @@ CREATE INDEX idx_created_tasks_project ON created_tasks (sonar_project_key);
 数据库功能已集成到主处理流程中，无需手动操作：
 
 ```python
-from src.sonar_resolve.core.main import SonarToJiraProcessor
+from sonar_tools.core.main import SonarToJiraProcessor
 
 # 创建处理器时会自动初始化数据库
 processor = SonarToJiraProcessor()
@@ -78,7 +78,7 @@ results = processor.process_critical_issues()
 如需手动管理数据库，可以直接使用ProjectStatusDB：
 
 ```python
-from src.sonar_resolve.utils.project_db import ProjectStatusDB
+from sonar_tools.utils.project_db import ProjectStatusDB
 
 # 初始化数据库
 project_db = ProjectStatusDB()

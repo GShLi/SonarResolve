@@ -6,7 +6,7 @@
 - models: 数据模型
 """
 
-from src.sonar_tools.core.config import Config
-from src.sonar_tools.core.models import SonarIssue, JiraTask
+from sonar_tools.core.config import Config
+from sonar_tools.core.models import JiraTask, SonarIssue
 
 __all__ = ["Config", "SonarIssue", "JiraTask"]

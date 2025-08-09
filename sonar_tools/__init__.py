@@ -17,34 +17,25 @@ __version__ = "1.0.0"
 __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
-# 核心组件导入
-from src.sonar_tools.core.config import Config
-from src.sonar_tools.core.models import SonarIssue, JiraTask
+from sonar_tools.clients.jira_client import JiraClient
 
 # 客户端导入
-from src.sonar_tools.clients.sonarqube_client import SonarQubeClient
-from src.sonar_tools.clients.jira_client import JiraClient
-from src.sonar_tools.clients.ai_client import AIClient
+from sonar_tools.clients.sonarqube_client import SonarQubeClient
 
-# 主要功能导入
-from src.sonar_tools.auto_fix import SonarAutoFixProcessor
+# 核心组件导入
+from sonar_tools.core.config import Config
+from sonar_tools.core.models import JiraTask, SonarIssue
 
 __all__ = [
     # 版本信息
     "__version__",
-    "__author__", 
+    "__author__",
     "__email__",
-    
     # 核心组件
     "Config",
     "SonarIssue",
     "JiraTask",
-    
     # 客户端
     "SonarQubeClient",
-    "JiraClient", 
-    "AIClient",
-    
-    # 主要处理器
-    "SonarAutoFixProcessor",
+    "JiraClient",
 ]

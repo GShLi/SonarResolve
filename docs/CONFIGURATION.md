@@ -202,7 +202,7 @@ AI_MAX_TOKENS=2000
 
 ```python
 # 验证必需配置
-python -c "from src.sonar_resolve.core.config import Config; Config.validate()"
+python -c "from sonar_resolve.core.config import Config; Config.validate()"
 ```
 
 ### 手动验证
@@ -213,7 +213,7 @@ python run.py test
 
 # 验证特定配置
 python -c "
-from src.sonar_resolve.core.config import Config
+from sonar_resolve.core.config import Config
 print('SonarQube URL:', Config.SONARQUBE_URL)
 print('Jira URL:', Config.JIRA_URL)
 print('AI Provider:', Config.AI_PROVIDER)

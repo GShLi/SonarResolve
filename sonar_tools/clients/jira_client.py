@@ -1,9 +1,11 @@
-import re
-from jira import JIRA
 import logging
-from typing import List, Dict, Any, Optional
-from src.sonar_tools.core.models import JiraTask, SonarIssue
-from src.sonar_tools.core.config import Config
+import re
+from typing import Any, Dict, List, Optional
+
+from jira import JIRA
+
+from sonar_tools.core.config import Config
+from sonar_tools.core.models import JiraTask, SonarIssue
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,6 @@ class JiraClient:
     def __init__(self, server: str, token: str, project_db=None):
         self.server = server
         self.project_db = project_db  # ProjectStatusDB实例，用于缓存查询
-
         try:
             self.jira = JIRA(
                 server=server,
@@ -28,11 +29,11 @@ class JiraClient:
     def create_issue(self, task: JiraTask) -> Optional[str]:
         """创建Jira问题"""
         issue_dict = {
-            'project': {'key': task.project_key},
-            'summary': task.summary,
-            'description': task.description,
-            'issuetype': {'name': task.issue_type},
-            'priority': {'name': task.priority}
+            "project": {"key": task.project_key},
+            "summary": task.summary,
+            "description": task.description,
+            "issuetype": {"name": task.issue_type},
+            "priority": {"name": task.priority},
         }
 
         # 如果有标签，直接在创建时添加
@@ -40,14 +41,14 @@ class JiraClient:
             # 验证和清理标签
             valid_labels = self._validate_and_clean_labels(task.labels)
             if valid_labels:
-                issue_dict['labels'] = valid_labels
+                issue_dict["labels"] = valid_labels
 
         try:
             # 创建问题
             new_issue = self.jira.create_issue(fields=issue_dict)
 
             # 如果创建时标签添加失败，尝试后续添加
-            if task.labels and not hasattr(new_issue.fields, 'labels'):
+            if task.labels and not hasattr(new_issue.fields, "labels"):
                 try:
                     self._add_labels_to_issue(new_issue, task.labels)
                 except Exception as label_error:
@@ -61,7 +62,9 @@ class JiraClient:
             logger.error(f"任务信息: {task.summary}")
             return None
 
-    def create_issues_from_sonar(self, sonar_issues: List[SonarIssue], project_key: str) -> List[str]:
+    def create_issues_from_sonar(
+        self, sonar_issues: List[SonarIssue], project_key: str
+    ) -> List[str]:
         """从SonarQube问题批量创建Jira任务"""
         created_issues = []
 
@@ -87,9 +90,11 @@ class JiraClient:
                             sonar_issue_key=sonar_issue.key,
                             jira_task_key=issue_key,
                             jira_project_key=project_key,
-                            sonar_project_key=sonar_issue.project
+                            sonar_project_key=sonar_issue.project,
                         )
-                        logger.debug(f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}")
+                        logger.debug(
+                            f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}"
+                        )
                     except Exception as e:
                         logger.warning(f"记录新创建任务到缓存失败: {e}")
 
@@ -100,14 +105,18 @@ class JiraClient:
         """为issue添加标签的辅助方法"""
         try:
             # 过滤并清理标签
-            valid_labels = [label.strip().replace(' ', '-') for label in labels if label and label.strip()]
+            valid_labels = [
+                label.strip().replace(" ", "-")
+                for label in labels
+                if label and label.strip()
+            ]
 
             if not valid_labels:
                 return
 
             # 方法1: 直接更新
             try:
-                issue.update(fields={'labels': valid_labels})
+                issue.update(fields={"labels": valid_labels})
                 logger.debug(f"成功添加标签: {valid_labels}")
                 return
             except Exception as e1:
@@ -117,13 +126,15 @@ class JiraClient:
             try:
                 fresh_issue = self.jira.issue(issue.key)
                 current_labels = []
-                if hasattr(fresh_issue.fields, 'labels') and fresh_issue.fields.labels:
-                    current_labels = [label.name if hasattr(label, 'name') else str(label)
-                                      for label in fresh_issue.fields.labels]
+                if hasattr(fresh_issue.fields, "labels") and fresh_issue.fields.labels:
+                    current_labels = [
+                        label.name if hasattr(label, "name") else str(label)
+                        for label in fresh_issue.fields.labels
+                    ]
 
                 # 合并标签，去重
                 all_labels = list(set(current_labels + valid_labels))
-                fresh_issue.update(fields={'labels': all_labels})
+                fresh_issue.update(fields={"labels": all_labels})
                 logger.debug(f"成功合并添加标签: {all_labels}")
                 return
             except Exception as e2:
@@ -131,14 +142,10 @@ class JiraClient:
 
             # 方法3: 使用REST API直接更新
             try:
-                update_data = {
-                    "fields": {
-                        "labels": valid_labels
-                    }
-                }
+                update_data = {"fields": {"labels": valid_labels}}
                 self.jira._session.put(
                     f"{self.jira._options['server']}/rest/api/2/issue/{issue.key}",
-                    json=update_data
+                    json=update_data,
                 )
                 logger.debug(f"通过REST API成功添加标签: {valid_labels}")
             except Exception as e3:
@@ -161,13 +168,13 @@ class JiraClient:
             cleaned_label = label.strip().lower()
 
             # 替换空格和特殊字符为连字符
-            cleaned_label = re.sub(r'[^\w\-]', '-', cleaned_label)
+            cleaned_label = re.sub(r"[^\w\-]", "-", cleaned_label)
 
             # 移除多余的连字符
-            cleaned_label = re.sub(r'-+', '-', cleaned_label)
+            cleaned_label = re.sub(r"-+", "-", cleaned_label)
 
             # 移除开头和结尾的连字符
-            cleaned_label = cleaned_label.strip('-')
+            cleaned_label = cleaned_label.strip("-")
 
             # 检查长度限制（Jira标签通常有长度限制）
             if len(cleaned_label) > 50:
@@ -203,13 +210,15 @@ class JiraClient:
 
             for issue in issues:
                 # 检查description或summary中是否包含完整的SonarQube问题key
-                description = getattr(issue.fields, 'description', '') or ''
-                summary = getattr(issue.fields, 'summary', '') or ''
+                description = getattr(issue.fields, "description", "") or ""
+                summary = getattr(issue.fields, "summary", "") or ""
 
                 if sonar_issue.key in description or sonar_issue.key in summary:
                     task_exists = True
                     existing_task = issue
-                    logger.debug(f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}")
+                    logger.debug(
+                        f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}"
+                    )
                     break
 
             if task_exists:
@@ -225,9 +234,11 @@ class JiraClient:
                             sonar_issue_key=sonar_issue.key,
                             jira_task_key=existing_task.key,
                             jira_project_key=project_key,
-                            sonar_project_key=sonar_project_key
+                            sonar_project_key=sonar_project_key,
                         )
-                        logger.debug(f"已补充任务记录到缓存: {sonar_issue.key} -> {existing_task.key}")
+                        logger.debug(
+                            f"已补充任务记录到缓存: {sonar_issue.key} -> {existing_task.key}"
+                        )
                     except Exception as e:
                         logger.debug(f"补充任务记录到缓存失败: {e}")
             else:
@@ -248,17 +259,17 @@ class JiraClient:
             return True
         except Exception as e:
             logger.error(f"Jira连接测试失败: {e}")
-            return False
+            logger.info("Some long log message that exceeds 88 characters ...")
 
     def get_project_info(self, project_key: str) -> Optional[Dict[str, Any]]:
         """获取项目信息"""
         try:
             project = self.jira.project(project_key)
             return {
-                'key': project.key,
-                'name': project.name,
-                'lead': project.lead.displayName if project.lead else None,
-                'description': getattr(project, 'description', '')
+                "key": project.key,
+                "name": project.name,
+                "lead": project.lead.displayName if project.lead else None,
+                "description": getattr(project, "description", ""),
             }
         except Exception as e:
             logger.error(f"获取Jira项目信息失败: {e}")
@@ -271,12 +282,18 @@ class JiraClient:
             project_list = []
 
             for project in projects:
-                project_list.append({
-                    'key': project.key,
-                    'name': project.name,
-                    'id': project.id,
-                    'lead': project.lead.displayName if hasattr(project, 'lead') and project.lead else None
-                })
+                project_list.append(
+                    {
+                        "key": project.key,
+                        "name": project.name,
+                        "id": project.id,
+                        "lead": (
+                            project.lead.displayName
+                            if hasattr(project, "lead") and project.lead
+                            else None
+                        ),
+                    }
+                )
 
             logger.info(f"获取到 {len(project_list)} 个Jira项目")
             return project_list
@@ -285,17 +302,18 @@ class JiraClient:
             logger.error(f"获取Jira项目列表失败: {e}")
             return []
 
-    def create_project(self, key: str, name: str,
-                       project_type: str = "software", lead: str = None) -> bool:
+    def create_project(
+        self, key: str, name: str, project_type: str = "software", lead: str = None
+    ) -> bool:
         """
         创建Jira项目
-        
+
         Args:
             key: 项目key
             name: 项目名称
             project_type: 项目类型，默认为'software'
             lead: 项目负责人，默认为当前用户
-            
+
         Returns:
             bool: 创建是否成功
         """
@@ -306,7 +324,7 @@ class JiraClient:
                 if existing_project:
                     logger.info(f"项目 {key} 已存在，跳过创建")
                     return True
-            except:
+            except Exception:
                 # 项目不存在，继续创建
                 pass
 
@@ -323,11 +341,7 @@ class JiraClient:
             logger.info(f"使用标准软件项目类型创建项目: {key}")
 
             # 尝试使用JIRA库的create_project方法（简化参数）
-            new_project = self.jira.create_project(
-                key=key,
-                name=name,
-                assignee=lead
-            )
+            self.jira.create_project(key=key, name=name, assignee=lead)
             logger.info(f"成功创建Jira项目: {key} - {name}")
             return True
 
@@ -340,5 +354,5 @@ class JiraClient:
         try:
             self.jira.project(project_key)
             return True
-        except:
+        except Exception:
             return False

@@ -241,7 +241,7 @@ def test_duplicate_handling():
 数据库功能已完全集成到主流程中：
 
 ```python
-from src.sonar_resolve.core.main import SonarToJiraProcessor
+from sonar_tools.core.main import SonarToJiraProcessor
 
 # 自动初始化并使用数据库
 processor = SonarToJiraProcessor()

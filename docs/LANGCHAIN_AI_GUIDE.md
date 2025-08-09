@@ -124,7 +124,7 @@ human_prompt = f"""请修复以下代码中的SonarQube Critical问题：
 
 ### 基本使用
 ```python
-from src.sonar_resolve.clients.ai_client import AIClientFactory
+from sonar_resolve.clients.ai_client import AIClientFactory
 
 # 创建AI客户端（根据.env配置自动选择）
 ai_client = AIClientFactory.create_client()
@@ -134,8 +134,9 @@ fixed_content = ai_client.fix_code_issue(sonar_issue, file_content)
 ```
 
 ### 直接使用特定客户端
+
 ```python
-from src.sonar_resolve.clients.ai_client import LangChainOpenAIClient, LangChainAnthropicClient
+from sonar_tools.clients.ai_client import LangChainOpenAIClient, LangChainAnthropicClient
 
 # OpenAI客户端
 openai_client = LangChainOpenAIClient(
@@ -145,14 +146,15 @@ openai_client = LangChainOpenAIClient(
 
 # Anthropic客户端
 anthropic_client = LangChainAnthropicClient(
-    api_key="your-api-key", 
+    api_key="your-api-key",
     model="claude-3-5-sonnet-20241022"
 )
 ```
 
 ### 批量修复
+
 ```python
-from src.sonar_resolve.clients.ai_client import CodeFixer
+from sonar_tools.clients.ai_client import CodeFixer
 
 fixer = CodeFixer()
 fixes = fixer.fix_multiple_issues(sonar_issues, repository_path)

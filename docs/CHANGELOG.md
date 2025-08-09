@@ -177,8 +177,9 @@ git_manager.py → src/sonar_resolve/utils/git_manager.py
 ### 💡 使用示例
 
 #### 自动仓库管理
+
 ```python
-from src.sonar_resolve.utils.git_manager import GitClient
+from sonar_tools.utils.git_manager import GitClient
 
 repo_manager = GitClient()
 
@@ -190,8 +191,9 @@ if success:
 ```
 
 #### 自动修复流程
+
 ```python
-from src.sonar_resolve.utils.git_manager import AutoFixProcessor
+from sonar_tools.utils.git_manager import AutoFixProcessor
 
 processor = AutoFixProcessor()
 
