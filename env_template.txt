@@ -1,0 +1,66 @@
+# SonarResolve 环境变量配置示例
+# 复制此文件为 .env 并填入实际配置
+
+# ================================
+# SonarQube 配置 (必需)
+# ================================
+SONARQUBE_URL=https://your-sonarqube-server.com
+SONARQUBE_TOKEN=your_sonarqube_token
+SONARQUBE_FETCH_CODE_SNIPPET=true
+
+# ================================
+# Jira 配置 (Jira模式必需)
+# ================================
+JIRA_URL=https://your-company.atlassian.net
+JIRA_API_TOKEN=your_jira_api_token
+JIRA_PROJECT_LEAD=your_username
+JIRA_TASK_PREFIX=[质量管理]
+JIRA_INCLUDE_CODE_SNIPPET=true
+JIRA_CODE_CONTEXT_LINES=3
+JIRA_MAX_TASKS_PER_RUN=50
+
+# ================================
+# GitLab 配置 (AI修复模式必需)
+# ================================
+GITLAB_URL=https://your-gitlab-server.com
+GITLAB_TOKEN=your_gitlab_access_token
+LOCAL_WORKSPACE=./workspace
+
+# ================================
+# AI 模型配置 (AI修复模式必需)
+# ================================
+AI_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key
+# LiteLLM代理地址（如果使用代理）
+OPENAI_BASE_URL=http://your-litellm-proxy:8000
+AI_MODEL=gpt-4
+AI_TEMPERATURE=0.1
+AI_MAX_TOKENS=4000
+
+# ================================
+# AI 自动修复配置
+# ================================
+AI_AUTO_FIX_ENABLED=true
+AI_CODE_CONTEXT_LINES=10
+AI_MAX_RETRIES=3
+
+# ================================
+# 日志配置
+# ================================
+LOG_LEVEL=INFO
+LOG_FILE_PATH=./logs/sonar_resolve.log
+LOG_MAX_SIZE=10
+LOG_BACKUP_COUNT=5
+
+# ================================
+# 数据库配置
+# ================================
+DATABASE_PATH=./db/project_status.db
+DATABASE_BACKUP=true
+
+# ================================
+# 调度器配置
+# ================================
+SCHEDULER_ENABLED=false
+SCHEDULER_CRON_EXPRESSION=0 2 * * *
+SCHEDULER_TIMEZONE=Asia/Shanghai

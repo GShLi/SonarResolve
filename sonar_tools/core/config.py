@@ -26,6 +26,8 @@ class Config:
         os.getenv("JIRA_INCLUDE_CODE_SNIPPET", "true").lower() == "true"
     )
     JIRA_CODE_CONTEXT_LINES = int(os.getenv("JIRA_CODE_CONTEXT_LINES", "3"))
+    # 单次运行创建JIRA任务的最大数量限制（0表示无限制）
+    JIRA_MAX_TASKS_PER_RUN = int(os.getenv("JIRA_MAX_TASKS_PER_RUN", "50"))
 
     # GitLab配置（用于仓库管理和Merge Request）
     GITLAB_URL = os.getenv("GITLAB_URL")
@@ -40,9 +42,16 @@ class Config:
     # AI模型配置
     AI_PROVIDER = os.getenv("AI_PROVIDER", "openai")  # openai, anthropic, azure
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # LiteLLM代理地址
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     AI_MODEL = os.getenv("AI_MODEL", "gpt-4")
+    AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.1"))
+    AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "4000"))
+    
+    # AI自动修复配置
+    AI_AUTO_FIX_ENABLED = os.getenv("AI_AUTO_FIX_ENABLED", "false").lower() == "true"
+    AI_CODE_CONTEXT_LINES = int(os.getenv("AI_CODE_CONTEXT_LINES", "10"))
+    AI_MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", "3"))
 
     # 日志配置
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -65,6 +74,14 @@ class Config:
         "DATABASE_PATH", os.path.join(_project_root, "db", "project_status.db")
     )
     DATABASE_BACKUP = os.getenv("DATABASE_BACKUP", "false").lower() == "true"
+
+    # 调度器配置
+    # Cron表达式配置，默认每天凌晨2点执行 (分 时 日 月 周)
+    SCHEDULER_CRON_EXPRESSION = os.getenv("SCHEDULER_CRON_EXPRESSION", "0 2 * * *")
+    # 是否启用调度器
+    SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "false").lower() == "true"
+    # 调度器时区
+    SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "Asia/Shanghai")
 
     @classmethod
     def validate_config(cls) -> bool:

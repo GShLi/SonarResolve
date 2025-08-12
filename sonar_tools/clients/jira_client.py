@@ -67,8 +67,25 @@ class JiraClient:
     ) -> List[str]:
         """从SonarQube问题批量创建Jira任务"""
         created_issues = []
+        max_tasks = Config.JIRA_MAX_TASKS_PER_RUN
+
+        # 检查是否设置了任务限制
+        if max_tasks > 0:
+            logger.info(f"设置了单次创建任务限制: {max_tasks} 个任务")
+        else:
+            logger.info("未设置任务创建限制")
 
         for i, sonar_issue in enumerate(sonar_issues, 1):
+            # 检查是否达到任务创建限制
+            if max_tasks > 0 and len(created_issues) >= max_tasks:
+                logger.warning(
+                    f"已达到单次创建任务限制 ({max_tasks} 个)，停止创建更多任务"
+                )
+                logger.info(
+                    f"剩余 {len(sonar_issues) - i + 1} 个问题将在下次运行时处理"
+                )
+                break
+
             logger.info(f"创建第 {i}/{len(sonar_issues)} 个Jira任务...")
 
             # 检查是否已存在相同的任务（优先从SQLite缓存查询）

@@ -2,8 +2,10 @@
 """
 SonarQube Critical Issues to Jira Tasks
 自动从SonarQube获取Critical问题并创建Jira任务
+支持AI自动修复功能
 """
 
+import argparse
 import logging
 import sys
 from datetime import datetime
@@ -46,6 +48,9 @@ class SonarToJiraProcessor:
             project_db=self.project_db,  # 传入数据库实例以支持缓存查询
         )
 
+        # 显示关键配置信息
+        self._log_configuration()
+
         # 清理过期的缓存记录
         try:
             cleaned_count = self.project_db.cleanup_old_records()
@@ -53,6 +58,22 @@ class SonarToJiraProcessor:
                 logger.info(f"清理了 {cleaned_count} 个过期的缓存记录")
         except Exception as e:
             logger.debug(f"清理缓存记录失败: {e}")
+
+    def _log_configuration(self):
+        """记录关键配置信息"""
+        logger.info("当前配置信息:")
+
+        # JIRA任务创建限制
+        if Config.JIRA_MAX_TASKS_PER_RUN > 0:
+            logger.info(f"  - JIRA任务创建限制: {Config.JIRA_MAX_TASKS_PER_RUN} 个/次")
+        else:
+            logger.info("  - JIRA任务创建限制: 无限制")
+
+        # 其他关键配置
+        logger.info(f"  - JIRA任务前缀: {Config.JIRA_TASK_PREFIX}")
+        logger.info(f"  - 包含代码片段: {Config.JIRA_INCLUDE_CODE_SNIPPET}")
+        if Config.JIRA_INCLUDE_CODE_SNIPPET:
+            logger.info(f"  - 代码上下文行数: {Config.JIRA_CODE_CONTEXT_LINES}")
 
     def test_connections(self) -> bool:
         """测试所有连接"""
@@ -416,6 +437,11 @@ SonarQube Critical问题批量处理报告
 处理时间: {results['start_time'].strftime('%Y-%m-%d %H:%M:%S')}
 处理耗时: {results['duration']}
 
+配置信息:
+- 单次任务创建限制: {Config.JIRA_MAX_TASKS_PER_RUN if Config.JIRA_MAX_TASKS_PER_RUN > 0 else '无限制'} 个
+- 任务前缀: {Config.JIRA_TASK_PREFIX}
+- 包含代码片段: {'是' if Config.JIRA_INCLUDE_CODE_SNIPPET else '否'}
+
 总体统计:
 - 处理项目总数: {results['total_projects']} 个
 - 成功处理项目: {results['successful_projects']} 个
@@ -580,55 +606,140 @@ SonarQube问题详情:
 
 
 def main():
-    """主函数"""
-    logger.info("SonarQube到Jira任务自动创建程序启动")
+    """主函数：支持Jira任务创建和AI自动修复"""
+    parser = argparse.ArgumentParser(
+        description="SonarQube Critical问题处理工具",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  python -m sonar_tools.main                           # 创建Jira任务（默认模式）
+  python -m sonar_tools.main --mode jira               # 创建Jira任务
+  python -m sonar_tools.main --mode ai-fix             # AI自动修复
+  python -m sonar_tools.main --mode ai-fix --project MY_PROJECT  # 修复指定项目
+  python -m sonar_tools.main --test                    # 连接测试
+        """
+    )
+    
+    parser.add_argument(
+        "--mode",
+        choices=["jira", "ai-fix"],
+        default="jira",
+        help="运行模式：jira=创建Jira任务（默认），ai-fix=AI自动修复"
+    )
+    
+    parser.add_argument(
+        "--project",
+        type=str,
+        help="指定项目Key（可选，不指定则处理所有项目）"
+    )
+    
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="仅测试连接，不执行实际操作"
+    )
+    
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="试运行模式，不实际创建任务或提交代码"
+    )
+
+    args = parser.parse_args()
 
     try:
-        processor = SonarToJiraProcessor()
+        logger.info("=" * 50)
+        logger.info("SonarQube Critical问题处理工具启动")
+        logger.info(f"运行模式: {args.mode}")
+        logger.info(f"项目范围: {args.project or '所有项目'}")
+        logger.info("=" * 50)
 
-        # 测试连接
-        if not processor.test_connections():
-            logger.error("连接测试失败，程序退出")
-            sys.exit(1)
-
-        # 显示缓存状态
-        processor.show_cache_status()
-
-        # 处理Critical问题
-        results = processor.process_critical_issues()
-
-        # 输出结果摘要
-        if "total_projects" in results:
-            # 批量处理结果
-            logger.info("批量处理完成！")
-            logger.info(
-                f"处理项目: {results['successful_projects']}/"
-                f"{results['total_projects']} 个成功"
-            )
-            logger.info(f"发现Critical问题: {results['total_sonar_issues']} 个")
-            logger.info(f"创建Jira任务: {results['total_jira_tasks_created']} 个")
-            logger.info(f"处理耗时: {results['duration']}")
-
-            if results["created_projects"]:
-                logger.info(f"新创建Jira项目: {', '.join(results['created_projects'])}")
-        else:
-            # 单项目处理结果（为了向后兼容保留）
-            logger.info("处理完成！")
-            logger.info(f"发现Critical问题: {results.get('sonar_issues_count', 0)} 个")
-            logger.info(f"创建Jira任务: {results.get('jira_tasks_created', 0)} 个")
-            logger.info(f"处理耗时: {results.get('duration', 'N/A')}")
-
-        if results["errors"]:
-            logger.error(f"处理过程中发生 {len(results['errors'])} 个错误")
-            for error in results["errors"]:
-                logger.error(f"  - {error}")
-            sys.exit(1)
+        if args.mode == "jira":
+            # Jira任务创建模式
+            processor = SonarToJiraProcessor()
+            
+            if args.test:
+                # 连接测试
+                if processor.test_connections():
+                    logger.info("所有连接测试成功")
+                    sys.exit(0)
+                else:
+                    logger.error("连接测试失败")
+                    sys.exit(1)
+            
+            # 显示缓存状态
+            processor.show_cache_status()
+            
+            # 执行Jira任务创建
+            results = processor.process_critical_issues()
+            _print_jira_results(results)
+            
+        elif args.mode == "ai-fix":
+            # AI自动修复模式
+            from .ai.ai_code_fixer import AICodeFixer
+            
+            fixer = AICodeFixer()
+            
+            if args.test:
+                # 连接测试
+                if fixer.test_connection():
+                    logger.info("AI修复系统连接测试成功")
+                    sys.exit(0)
+                else:
+                    logger.error("AI修复系统连接测试失败")
+                    sys.exit(1)
+            
+            # 执行AI自动修复
+            if args.dry_run:
+                logger.info("试运行模式：将分析问题但不实际修复")
+                # TODO: 实现试运行逻辑
+                logger.warning("试运行模式暂未实现")
+                sys.exit(0)
+            
+            success = fixer.process_critical_issues(args.project)
+            
+            if success:
+                logger.info("AI自动修复完成")
+                sys.exit(0)
+            else:
+                logger.error("AI自动修复失败")
+                sys.exit(1)
 
     except KeyboardInterrupt:
         logger.info("用户中断程序")
         sys.exit(0)
     except Exception as e:
         logger.error(f"程序异常退出: {e}")
+        sys.exit(1)
+
+
+def _print_jira_results(results):
+    """打印Jira任务创建结果"""
+    if isinstance(results, dict) and "total_projects" in results:
+        # 批量处理结果
+        logger.info("=" * 50)
+        logger.info("批量处理完成！")
+        logger.info(
+            f"处理项目: {results['successful_projects']}/"
+            f"{results['total_projects']} 个成功"
+        )
+        logger.info(f"发现Critical问题: {results['total_sonar_issues']} 个")
+        logger.info(f"创建Jira任务: {results['total_jira_tasks_created']} 个")
+        logger.info(f"处理耗时: {results['duration']}")
+
+        if results["created_projects"]:
+            logger.info(f"新创建Jira项目: {', '.join(results['created_projects'])}")
+    else:
+        # 单项目处理结果（为了向后兼容保留）
+        logger.info("处理完成！")
+        logger.info(f"发现Critical问题: {results.get('sonar_issues_count', 0)} 个")
+        logger.info(f"创建Jira任务: {results.get('jira_tasks_created', 0)} 个")
+        logger.info(f"处理耗时: {results.get('duration', 'N/A')}")
+
+    if results["errors"]:
+        logger.error(f"处理过程中发生 {len(results['errors'])} 个错误")
+        for error in results["errors"]:
+            logger.error(f"  - {error}")
         sys.exit(1)
 
 

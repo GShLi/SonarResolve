@@ -1,0 +1,270 @@
+"""
+AI代码修复器
+集成LangChain、SonarQube和GitLab，实现自动代码修复
+"""
+
+import logging
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from ..clients.git_client import AutoFixProcessor, GitClient, GitLabManager
+from ..clients.sonarqube_client import SonarQubeClient
+from ..core.config import Config
+from ..core.models import SonarIssue
+from .langchain_client import LangChainClient
+
+logger = logging.getLogger(__name__)
+
+
+class AICodeFixer:
+    """AI代码自动修复器"""
+
+    def __init__(self):
+        """初始化AI代码修复器"""
+        self.config = Config
+        self._validate_config()
+        self._initialize_clients()
+
+    def _validate_config(self):
+        """验证配置"""
+        self.config.validate_ai_config()
+        self.config.validate_gitlab_config()
+
+    def _initialize_clients(self):
+        """初始化客户端"""
+        try:
+            # 初始化SonarQube客户端
+            self.sonar_client = SonarQubeClient(
+                self.config.SONARQUBE_URL,
+                self.config.SONARQUBE_TOKEN
+            )
+
+            # 初始化Git相关客户端
+            self.git_client = GitClient()
+            self.auto_fix_processor = AutoFixProcessor()
+
+            # 初始化AI客户端
+            self.ai_client = LangChainClient()
+
+            logger.info("所有客户端初始化成功")
+
+        except Exception as e:
+            logger.error(f"客户端初始化失败: {e}")
+            raise
+
+    def process_critical_issues(self, project_key: str = None) -> bool:
+        """
+        处理Critical问题
+        
+        Args:
+            project_key: 可选的项目Key，如果不提供则处理所有项目
+            
+        Returns:
+            处理是否成功
+        """
+        try:
+            # 获取Critical问题
+            issues = self.sonar_client.get_critical_issues(project_key)
+            if not issues:
+                logger.info("没有发现Critical问题")
+                return True
+
+            # 按项目分组处理问题
+            issues_by_project = self._group_issues_by_project(issues)
+            
+            for project_name, project_issues in issues_by_project.items():
+                self._process_project_issues(project_name, project_issues)
+
+            return True
+
+        except Exception as e:
+            logger.error(f"处理Critical问题失败: {e}")
+            return False
+
+    def _group_issues_by_project(self, issues: List[SonarIssue]) -> Dict[str, List[SonarIssue]]:
+        """按项目分组问题"""
+        issues_by_project = {}
+        
+        for issue in issues:
+            project_name = issue.project_name
+            if project_name not in issues_by_project:
+                issues_by_project[project_name] = []
+            issues_by_project[project_name].append(issue)
+            
+        return issues_by_project
+
+    def _process_project_issues(self, project_name: str, issues: List[SonarIssue]) -> bool:
+        """处理单个项目的问题"""
+        try:
+            logger.info(f"开始处理项目 {project_name} 的问题，共 {len(issues)} 个")
+
+            # 准备Git仓库
+            success, repo_path, repo_info = self.git_client.prepare_repository_for_project(project_name)
+            if not success or not repo_path or not repo_info:
+                logger.error(f"准备Git仓库失败: {project_name}")
+                return False
+
+            # 创建GitLab MR管理器
+            gitlab_manager = GitLabManager(repo_info["id"])
+
+            # 创建修复分支
+            branch_name = f"fix/sonar-critical-{int(time.time())}"
+            from ..clients.git_client import GitManager
+            git_manager = GitManager(str(repo_path))
+            if not git_manager.create_branch(branch_name):
+                logger.error("创建修复分支失败")
+                return False
+
+            # 处理每个问题
+            modified_files = []
+            for issue in issues:
+                if self._fix_single_issue(issue, repo_path):
+                    relative_path = issue.component.split(":")[-1]  # 获取相对路径
+                    modified_files.append(relative_path)
+
+            if not modified_files:
+                logger.warning("没有文件被修复")
+                return False
+
+            # 提交更改
+            commit_info = self._generate_commit_info(issues)
+            if not git_manager.commit_changes(modified_files, commit_info["commit_message"]):
+                logger.error("提交更改失败")
+                return False
+
+            # 推送分支
+            if not git_manager.push_branch(branch_name):
+                logger.error("推送分支失败")
+                return False
+
+            # 创建Merge Request
+            mr_result = gitlab_manager.create_merge_request(
+                project_id=repo_info["id"],
+                source_branch=branch_name,
+                target_branch=repo_info["default_branch"],
+                title=commit_info["mr_title"],
+                description=commit_info["mr_description"],
+                labels=["SonarQube", "Critical-Fix", "AI-Generated"]
+            )
+
+            if not mr_result:
+                logger.error("创建Merge Request失败")
+                return False
+
+            logger.info(f"成功创建Merge Request: {mr_result['url']}")
+            return True
+
+        except Exception as e:
+            logger.error(f"处理项目问题失败: {e}")
+            return False
+
+    def _fix_single_issue(self, issue: SonarIssue, repo_path: Path) -> bool:
+        """修复单个问题"""
+        try:
+            logger.info(f"开始修复问题: {issue.key}")
+
+            # 准备问题数据
+            issue_data = {
+                "key": issue.key,
+                "rule": issue.rule,
+                "message": issue.message,
+                "component": issue.component,
+                "project": issue.project_name,
+                "severity": issue.severity,
+                "line": issue.line,
+                "code_snippet": issue.code_snippet,
+                "rule_info": issue.rule_info
+            }
+
+            # 分析问题
+            analysis_result = self.ai_client.analyze_code_issue(issue_data)
+            if not analysis_result:
+                logger.error(f"问题分析失败: {issue.key}")
+                return False
+
+            # 生成修复方案
+            fix_result = self.ai_client.fix_code_issue(issue_data, analysis_result)
+            if not fix_result or "fixed_code" not in fix_result:
+                logger.error(f"生成修复方案失败: {issue.key}")
+                return False
+
+            # 验证修复
+            validation_result = self.ai_client.validate_fix(
+                issue.code_snippet,
+                fix_result["fixed_code"],
+                issue_data
+            )
+
+            if not validation_result.get("compliance_check", False):
+                logger.error(f"修复验证失败: {issue.key}")
+                return False
+
+            # 应用修复
+            relative_path = issue.component.split(":")[-1]  # 获取相对路径
+            file_path = repo_path / relative_path
+
+            fix_data = {
+                "file_path": relative_path,
+                "old_code": issue.code_snippet,
+                "new_code": fix_result["fixed_code"]
+            }
+
+            if self.auto_fix_processor._apply_fix(file_path, fix_data):
+                logger.info(f"成功修复问题: {issue.key}")
+                return True
+            else:
+                logger.error(f"应用修复失败: {issue.key}")
+                return False
+
+        except Exception as e:
+            logger.error(f"修复问题失败 {issue.key}: {e}")
+            return False
+
+    def _generate_commit_info(self, issues: List[SonarIssue]) -> Dict[str, str]:
+        """生成提交信息"""
+        issue_count = len(issues)
+        rules = {issue.rule for issue in issues}
+        
+        commit_message = f"fix: 修复 {issue_count} 个SonarQube Critical问题\n\n"
+        commit_message += "修复的规则:\n" + "\n".join(f"- {rule}" for rule in rules)
+        
+        mr_description = (
+            f"# AI自动修复报告\n\n"
+            f"本MR修复了 {issue_count} 个SonarQube Critical问题。\n\n"
+            f"## 修复的问题\n"
+        )
+        
+        for issue in issues:
+            mr_description += f"\n### {issue.rule}\n"
+            mr_description += f"- 问题描述: {issue.message}\n"
+            mr_description += f"- 文件: {issue.component}\n"
+            mr_description += f"- 行数: {issue.line}\n"
+        
+        mr_description += "\n\n请仔细review修改内容。"
+        
+        return {
+            "commit_message": commit_message,
+            "mr_title": f"fix(sonar): 修复 {issue_count} 个Critical问题",
+            "mr_description": mr_description
+        }
+
+    def test_connection(self) -> bool:
+        """测试所有连接"""
+        try:
+            # 测试SonarQube连接
+            if not self.sonar_client.test_connection():
+                logger.error("SonarQube连接测试失败")
+                return False
+
+            # 测试AI连接
+            if not self.ai_client.test_connection():
+                logger.error("AI连接测试失败")
+                return False
+
+            logger.info("所有连接测试成功")
+            return True
+
+        except Exception as e:
+            logger.error(f"连接测试失败: {e}")
+            return False
