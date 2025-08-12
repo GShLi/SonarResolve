@@ -97,7 +97,7 @@ class LangChainClient:
         Returns:
             分析结果字典
         """
-        from .prompts import PromptTemplates
+        from ..ai.prompts import PromptTemplates
         
         try:
             # 构建分析提示词
@@ -145,7 +145,7 @@ class LangChainClient:
         Returns:
             修复结果字典
         """
-        from .prompts import PromptTemplates
+        from ..ai.prompts import PromptTemplates
         
         try:
             # 构建修复提示词
@@ -195,7 +195,7 @@ class LangChainClient:
         Returns:
             验证结果字典
         """
-        from .prompts import PromptTemplates
+        from ..ai.prompts import PromptTemplates
         
         try:
             # 构建验证提示词
@@ -229,6 +229,78 @@ class LangChainClient:
                 "quality_grade": "F",
                 "error": str(e)
             }
+
+    def apply_code_fix(self, original_content: str, fixed_code: str, issue_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        使用AI智能应用代码修复
+        
+        Args:
+            original_content: 原始文件内容
+            fixed_code: AI生成的修复代码
+            issue_data: SonarQube问题数据
+            
+        Returns:
+            应用结果字典，包含修改后的文件内容
+        """
+        from ..ai.prompts import PromptTemplates
+        
+        try:
+            # 构建代码应用提示词
+            system_prompt = PromptTemplates.get_code_application_system_prompt()
+            user_prompt = PromptTemplates.build_code_application_prompt(
+                original_content, fixed_code, issue_data
+            )
+            
+            # 发送请求
+            response = self.chat(system_prompt, user_prompt)
+            
+            # 尝试解析JSON响应
+            try:
+                result = json.loads(response)
+                logger.info(f"AI成功应用代码修复: {issue_data.get('key', 'Unknown')}")
+                
+                # 验证返回的内容
+                if result.get("success") and result.get("modified_content"):
+                    logger.info(f"应用策略: {result.get('strategy_used')}")
+                    logger.info(f"信心等级: {result.get('confidence')}/10")
+                    if result.get("warnings"):
+                        logger.warning(f"AI应用警告: {result.get('warnings')}")
+                    return result
+                else:
+                    logger.error("AI无法应用修复代码")
+                    return {
+                        "success": False,
+                        "strategy_used": "应用失败",
+                        "modified_content": original_content,
+                        "changes_summary": "AI无法确定如何应用修复",
+                        "confidence": 0,
+                        "warnings": ["AI应用失败"],
+                        "raw_response": response
+                    }
+                    
+            except json.JSONDecodeError:
+                logger.warning("AI代码应用响应不是有效JSON")
+                return {
+                    "success": False,
+                    "strategy_used": "JSON解析失败",
+                    "modified_content": original_content,
+                    "changes_summary": "AI响应格式错误",
+                    "confidence": 0,
+                    "warnings": ["JSON解析失败"],
+                    "raw_response": response
+                }
+                
+        except Exception as e:
+            logger.error(f"AI代码应用失败: {e}")
+            return {
+                "success": False,
+                "strategy_used": "异常失败",
+                "modified_content": original_content,
+                "changes_summary": f"异常: {e}",
+                "confidence": 0,
+                "warnings": [f"系统异常: {e}"],
+                "error": str(e)
+            }
     
     def generate_commit_info(self, issue_data: Dict[str, Any], fix_result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -241,7 +313,7 @@ class LangChainClient:
         Returns:
             提交信息字典
         """
-        from .prompts import PromptTemplates
+        from ..ai.prompts import PromptTemplates
         
         try:
             # 构建提交信息生成提示词

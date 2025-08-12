@@ -12,7 +12,7 @@ from ..clients.git_client import AutoFixProcessor, GitClient, GitLabManager
 from ..clients.sonarqube_client import SonarQubeClient
 from ..core.config import Config
 from ..core.models import SonarIssue
-from .langchain_client import LangChainClient
+from ..clients.langchain_client import LangChainClient
 
 logger = logging.getLogger(__name__)
 
@@ -204,10 +204,15 @@ class AICodeFixer:
             relative_path = issue.component.split(":")[-1]  # 获取相对路径
             file_path = repo_path / relative_path
 
+            # 构建修复数据，包含所有必要信息
             fix_data = {
                 "file_path": relative_path,
-                "old_code": issue.code_snippet,
-                "new_code": fix_result["fixed_code"]
+                "fixed_code": fix_result["fixed_code"],
+                "code_snippet": issue.code_snippet,
+                "line": issue.line,
+                "language": issue_data.get("language", ""),
+                "issue_key": issue.key,
+                "rule": issue.rule
             }
 
             if self.auto_fix_processor._apply_fix(file_path, fix_data):

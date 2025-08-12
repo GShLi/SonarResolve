@@ -45,6 +45,16 @@ AI_CODE_CONTEXT_LINES=10
 AI_MAX_RETRIES=3
 
 # ================================
+# AI 代码应用配置 (新功能)
+# ================================
+# 是否使用AI智能应用修复（推荐）
+AI_APPLY_FIXES=true
+# AI应用信心阈值(1-10)，低于此值将使用传统方法
+AI_APPLY_CONFIDENCE_THRESHOLD=7
+# AI失败时是否回退到传统方法
+AI_FALLBACK_TO_TRADITIONAL=true
+
+# ================================
 # 日志配置
 # ================================
 LOG_LEVEL=INFO

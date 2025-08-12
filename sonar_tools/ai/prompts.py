@@ -191,6 +191,83 @@ class PromptTemplates:
         return prompt
 
     @staticmethod
+    def get_code_application_system_prompt() -> str:
+        """获取代码应用的系统提示词"""
+        return """你是一个专业的代码编辑专家，负责将AI修复的代码准确地应用到原始文件中。
+
+你的任务是：
+1. 分析原始文件内容和修复代码
+2. 智能识别需要修复的代码位置
+3. 精确应用修复，保持文件的完整性
+4. 确保修复后的代码语法正确
+
+应用策略（按优先级）：
+1. **精确行号匹配**：如果有准确的行号信息，直接替换指定行
+2. **模式匹配**：通过代码特征匹配，找到需要修复的代码段
+3. **函数级替换**：替换整个函数或方法块
+4. **智能合并**：将修复代码智能合并到原文件中
+
+你必须以JSON格式回复，包含以下字段：
+{
+  "success": true/false,
+  "strategy_used": "使用的应用策略",
+  "modified_content": "修改后的完整文件内容",
+  "changes_summary": "修改摘要说明",
+  "confidence": "应用信心等级(1-10)",
+  "warnings": ["潜在问题警告"],
+  "validation_notes": "验证说明"
+}
+
+要求：
+- 保持原文件的结构和格式
+- 不破坏现有功能
+- 精确应用修复，避免误修改
+- 如果无法确定应用位置，返回 success: false"""
+
+    @staticmethod
+    def build_code_application_prompt(
+        original_content: str, 
+        fixed_code: str, 
+        issue_data: Dict[str, Any]
+    ) -> str:
+        """构建代码应用提示词"""
+        language = issue_data.get('language', 'unknown')
+        file_path = issue_data.get('component', 'Unknown')
+        line_number = issue_data.get('line', 'Unknown')
+        problem_description = issue_data.get('message', 'No description')
+        
+        return f"""请将AI修复的代码应用到原始文件中：
+
+## 任务信息
+- **文件路径**: {file_path}
+- **问题行号**: {line_number}
+- **代码语言**: {language}
+- **问题描述**: {problem_description}
+
+## 原始文件内容
+```{language}
+{original_content}
+```
+
+## AI修复后的代码
+```{language}
+{fixed_code}
+```
+
+## 原始问题代码片段（来自SonarQube）
+```{language}
+{issue_data.get('code_snippet', '无代码片段')}
+```
+
+请分析原始文件和修复代码，找到最佳的应用方式，并返回修改后的完整文件内容。
+
+注意事项：
+1. 修复代码可能包含行号标记（如 "→ 123: "），需要清理
+2. 要保持原文件的导入语句、注释、格式等
+3. 只修改必要的部分，不要改动无关代码
+4. 确保修复后的代码语法正确且逻辑完整"""
+
+    @staticmethod
     def build_validation_prompt(original_code: str, fixed_code: str, issue_data: Dict[str, Any]) -> str:
         """构建修复验证提示词"""
         language = issue_data.get('language', 'unknown')

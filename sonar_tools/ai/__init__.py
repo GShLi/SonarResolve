@@ -4,7 +4,7 @@ AI自动修复模块
 """
 
 from .ai_code_fixer import AICodeFixer
-from .langchain_client import LangChainClient
+from ..clients.langchain_client import LangChainClient
 from .prompts import PromptTemplates
 
 __all__ = ["AICodeFixer", "LangChainClient", "PromptTemplates"]

@@ -5,6 +5,7 @@ Git 管理器
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -113,8 +114,6 @@ class GitClient:
         # 清理项目名，用作目录名
         clean_name = project_name.replace(" ", "-").replace("_", "-").lower()
         # 移除特殊字符
-        import re
-
         clean_name = re.sub(r"[^\w\-]", "", clean_name)
         return Path(self.local_workspace) / clean_name
 
@@ -465,20 +464,311 @@ class AutoFixProcessor:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # 应用修复
-            if fix.get("old_code") and fix.get("new_code"):
-                content = content.replace(fix["old_code"], fix["new_code"])
-
-            # 写回文件
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
-
-            logger.info(f"应用修复成功: {file_path}")
-            return True
+            # 智能应用修复
+            if self._apply_smart_fix(file_path, content, fix):
+                logger.info(f"应用修复成功: {file_path}")
+                return True
+            else:
+                logger.error(f"应用修复失败: {file_path}")
+                return False
 
         except Exception as e:
             logger.error(f"应用修复失败 {file_path}: {e}")
             return False
+
+    def _apply_smart_fix(self, file_path: Path, content: str, fix: dict) -> bool:
+        """智能应用代码修复（支持AI应用和传统方法）"""
+        try:
+            # 获取修复信息
+            fixed_code = fix.get("fixed_code", "").strip()
+            if not fixed_code:
+                logger.error("没有有效的修复代码")
+                return False
+
+            # 首先尝试AI智能应用（推荐方式）
+            if self._try_ai_application(file_path, content, fix):
+                return True
+            
+            logger.info("AI应用失败，回退到传统修复策略")
+            
+            # 回退到传统的多策略修复方法
+            strategies = [
+                self._apply_by_line_range,
+                self._apply_by_pattern_match,
+                self._apply_by_function_block,
+                self._apply_full_replacement
+            ]
+
+            for strategy in strategies:
+                try:
+                    new_content = strategy(content, fix)
+                    if new_content and new_content != content:
+                        # 写回文件
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+                        logger.info(f"使用策略 {strategy.__name__} 修复成功")
+                        return True
+                except Exception as e:
+                    logger.debug(f"修复策略 {strategy.__name__} 失败: {e}")
+                    continue
+
+            logger.error("所有修复策略都失败了")
+            return False
+
+        except Exception as e:
+            logger.error(f"智能修复失败: {e}")
+            return False
+
+    def _try_ai_application(self, file_path: Path, content: str, fix: dict) -> bool:
+        """尝试使用AI智能应用修复"""
+        try:
+            # 检查是否启用AI应用
+            from ..core.config import Config
+            if not getattr(Config, 'AI_APPLY_FIXES', True):
+                logger.debug("AI应用修复已禁用")
+                return False
+            
+            # 导入AI客户端
+            from .langchain_client import LangChainClient
+            
+            ai_client = LangChainClient()
+            fixed_code = fix.get("fixed_code", "")
+            
+            # 构造问题数据
+            issue_data = {
+                "component": str(file_path),
+                "line": fix.get("line", 0),
+                "language": fix.get("language", self._detect_language(file_path)),
+                "message": fix.get("message", "SonarQube Critical issue"),
+                "code_snippet": fix.get("code_snippet", ""),
+                "key": fix.get("key", f"issue_{file_path.name}")
+            }
+            
+            # 使用AI应用修复
+            result = ai_client.apply_code_fix(content, fixed_code, issue_data)
+            
+            if result.get("success") and result.get("modified_content"):
+                confidence = result.get("confidence", 0)
+                threshold = getattr(Config, 'AI_APPLY_CONFIDENCE_THRESHOLD', 7)
+                
+                if confidence >= threshold:  # 使用配置的信心阈值
+                    # 写回文件
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(result["modified_content"])
+                    
+                    logger.info(f"AI应用修复成功 - 策略: {result.get('strategy_used')}, 信心: {confidence}/10")
+                    if result.get("warnings"):
+                        logger.warning(f"AI应用警告: {', '.join(result['warnings'])}")
+                    
+                    return True
+                else:
+                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
+                    return False
+            else:
+                logger.debug(f"AI应用失败: {result.get('changes_summary', 'Unknown reason')}")
+                return False
+                
+        except ImportError:
+            logger.debug("AI组件未可用，使用传统修复方法")
+            return False
+        except Exception as e:
+            logger.debug(f"AI应用异常: {e}")
+            return False
+
+    def _detect_language(self, file_path: Path) -> str:
+        """根据文件扩展名检测编程语言"""
+        extension = file_path.suffix.lower()
+        language_map = {
+            '.py': 'python',
+            '.java': 'java',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.cs': 'csharp',
+            '.cpp': 'cpp',
+            '.c': 'c',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.kt': 'kotlin',
+            '.scala': 'scala'
+        }
+        return language_map.get(extension, 'unknown')
+
+    def _apply_by_line_range(self, content: str, fix: dict) -> str:
+        """基于行号范围的修复策略"""
+        # 从fix信息中获取行号
+        line_number = fix.get("line", 0)
+        if not line_number:
+            return None
+
+        lines = content.split('\n')
+        fixed_code = fix.get("fixed_code", "").strip()
+        
+        # 获取问题代码的上下文行数
+        context_lines = 5
+        start_line = max(0, line_number - context_lines - 1)
+        end_line = min(len(lines), line_number + context_lines)
+        
+        # 清理fixed_code，移除行号标记
+        clean_fixed_lines = []
+        for line in fixed_code.split('\n'):
+            # 移除行号前缀 (如 "  123: " 或 "→ 123: ")
+            clean_line = re.sub(r'^[→\s]*\d+:\s*', '', line)
+            clean_fixed_lines.append(clean_line)
+        
+        # 替换目标行及其上下文
+        new_lines = lines[:start_line] + clean_fixed_lines + lines[end_line:]
+        return '\n'.join(new_lines)
+
+    def _apply_by_pattern_match(self, content: str, fix: dict) -> str:
+        """基于模式匹配的修复策略"""
+        # 从原始代码片段中提取关键模式
+        code_snippet = fix.get("code_snippet", "")
+        if not code_snippet:
+            return None
+            
+        # 提取问题行的关键代码（去除行号和标记）
+        pattern_lines = []
+        for line in code_snippet.split('\n'):
+            if '→' in line:  # 问题行
+                clean_line = re.sub(r'^[→\s]*\d+:\s*', '', line).strip()
+                if clean_line:
+                    pattern_lines.append(clean_line)
+        
+        if not pattern_lines:
+            return None
+            
+        # 在文件中查找匹配的代码行
+        fixed_code = fix.get("fixed_code", "").strip()
+        clean_fixed_lines = []
+        for line in fixed_code.split('\n'):
+            clean_line = re.sub(r'^[→\s]*\d+:\s*', '', line)
+            clean_fixed_lines.append(clean_line)
+        
+        # 替换第一个匹配的模式
+        for pattern in pattern_lines:
+            if pattern in content:
+                # 找到完整的行进行替换
+                lines = content.split('\n')
+                for i, line in enumerate(lines):
+                    if pattern.strip() in line.strip():
+                        # 替换这一行
+                        if clean_fixed_lines:
+                            lines[i] = clean_fixed_lines[0]  # 使用修复后的第一行
+                            return '\n'.join(lines)
+        
+        return None
+
+    def _apply_by_function_block(self, content: str, fix: dict) -> str:
+        """基于函数块的修复策略"""
+        # 获取行号和语言信息
+        line_number = fix.get("line", 0)
+        language = fix.get("language", "").lower()
+        
+        if not line_number:
+            return None
+            
+        lines = content.split('\n')
+        if line_number > len(lines):
+            return None
+            
+        # 根据语言找到函数或方法边界
+        function_start, function_end = self._find_function_boundaries(
+            lines, line_number - 1, language
+        )
+        
+        if function_start is None or function_end is None:
+            return None
+            
+        # 获取修复后的代码
+        fixed_code = fix.get("fixed_code", "").strip()
+        clean_fixed_lines = []
+        for line in fixed_code.split('\n'):
+            clean_line = re.sub(r'^[→\s]*\d+:\s*', '', line)
+            clean_fixed_lines.append(clean_line)
+        
+        # 替换函数块
+        new_lines = (
+            lines[:function_start] + 
+            clean_fixed_lines + 
+            lines[function_end + 1:]
+        )
+        
+        return '\n'.join(new_lines)
+
+    def _apply_full_replacement(self, content: str, fix: dict) -> str:
+        """全文件替换策略（最后的备用策略）"""
+        fixed_code = fix.get("fixed_code", "").strip()
+        if not fixed_code:
+            return None
+            
+        # 清理修复代码
+        clean_lines = []
+        for line in fixed_code.split('\n'):
+            clean_line = re.sub(r'^[→\s]*\d+:\s*', '', line)
+            clean_lines.append(clean_line)
+        
+        # 仅当修复代码看起来是完整文件时才使用
+        fixed_content = '\n'.join(clean_lines)
+        if len(fixed_content) > len(content) * 0.5:  # 至少是原文件的50%
+            return fixed_content
+            
+        return None
+
+    def _find_function_boundaries(self, lines: list, target_line: int, language: str) -> tuple:
+        """查找函数边界"""
+        if target_line < 0 or target_line >= len(lines):
+            return None, None
+            
+        # 根据语言定义函数关键字
+        function_keywords = {
+            'python': ['def ', 'class ', 'async def '],
+            'java': ['public ', 'private ', 'protected ', 'static '],
+            'javascript': ['function ', 'const ', 'let ', 'var '],
+            'typescript': ['function ', 'const ', 'let ', 'var ', 'export '],
+            'csharp': ['public ', 'private ', 'protected ', 'internal '],
+            'cpp': ['int ', 'void ', 'double ', 'float ', 'bool '],
+        }
+        
+        keywords = function_keywords.get(language, ['def ', 'function '])
+        
+        # 向上查找函数开始
+        function_start = None
+        for i in range(target_line, -1, -1):
+            line = lines[i].strip()
+            if any(keyword in line for keyword in keywords):
+                function_start = i
+                break
+                
+        # 向下查找函数结束（简单的括号匹配）
+        function_end = None
+        if function_start is not None:
+            brace_count = 0
+            in_function = False
+            
+            for i in range(function_start, len(lines)):
+                line = lines[i]
+                if '{' in line:
+                    brace_count += line.count('{')
+                    in_function = True
+                if '}' in line:
+                    brace_count -= line.count('}')
+                    
+                if in_function and brace_count == 0:
+                    function_end = i
+                    break
+                    
+            # 对于Python等使用缩进的语言
+            if function_end is None and language == 'python':
+                base_indent = len(lines[function_start]) - len(lines[function_start].lstrip())
+                for i in range(function_start + 1, len(lines)):
+                    line = lines[i]
+                    if line.strip() and len(line) - len(line.lstrip()) <= base_indent:
+                        function_end = i - 1
+                        break
+                        
+        return function_start, function_end
 
 
 class GitLabManager:
