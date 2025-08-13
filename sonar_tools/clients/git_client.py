@@ -23,6 +23,7 @@ except ImportError:
 try:
     import git
     from git import Repo
+
     GITPYTHON_AVAILABLE = True
 except ImportError:
     GITPYTHON_AVAILABLE = False
@@ -184,7 +185,7 @@ class GitClient:
         if not GITPYTHON_AVAILABLE:
             logger.error("GitPython库不可用，无法执行git clone")
             return False, None
-            
+
         try:
             # 确保父目录存在
             local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,15 +199,17 @@ class GitClient:
                     return True, local_path
 
             # 使用GitPython执行clone
-            logger.info(f"执行GitPython clone --branch {default_branch} [URL] {local_path}")
-            
+            logger.info(
+                f"执行GitPython clone --branch {default_branch} [URL] {local_path}"
+            )
+
             repo = Repo.clone_from(
                 url=clone_url,
                 to_path=str(local_path),
                 branch=default_branch,
-                depth=1  # 浅克隆，只获取最新提交，提高性能
+                depth=1,  # 浅克隆，只获取最新提交，提高性能
             )
-            
+
             logger.info(f"仓库克隆成功: {local_path}")
             return True, local_path
 
@@ -224,19 +227,19 @@ class GitClient:
         if not GITPYTHON_AVAILABLE:
             logger.error("GitPython库不可用，无法执行git pull")
             return False, None
-            
+
         try:
             # 使用GitPython打开仓库
             repo = Repo(repo_path)
-            
+
             if repo.bare:
                 logger.error(f"仓库是bare仓库: {repo_path}")
                 return False, None
-                
+
             # 检查当前分支
             current_branch = repo.active_branch.name
             logger.info(f"当前分支: {current_branch}")
-            
+
             # 如果不在默认分支，先切换
             if current_branch != default_branch:
                 logger.info(f"切换到默认分支: {default_branch}")
@@ -247,40 +250,50 @@ class GitClient:
                     else:
                         # 创建并跟踪远程分支
                         if f"origin/{default_branch}" in repo.refs:
-                            repo.create_head(default_branch, repo.refs[f"origin/{default_branch}"])
-                            repo.heads[default_branch].set_tracking_branch(repo.refs[f"origin/{default_branch}"])
+                            repo.create_head(
+                                default_branch, repo.refs[f"origin/{default_branch}"]
+                            )
+                            repo.heads[default_branch].set_tracking_branch(
+                                repo.refs[f"origin/{default_branch}"]
+                            )
                             repo.heads[default_branch].checkout()
                         else:
                             logger.error(f"远程分支 origin/{default_branch} 不存在")
                             return False, None
-                            
+
                 except Exception as e:
-                    logger.warning(f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}")
-            
+                    logger.warning(
+                        f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}"
+                    )
+
             # 执行git pull
             logger.info(f"执行git pull: {repo_path}")
-            
+
             # 获取远程仓库引用
             if not repo.remotes:
                 logger.error("没有配置远程仓库")
                 return False, None
-                
+
             origin = repo.remotes.origin
-            
+
             # 首先fetch最新的远程内容
             logger.info("执行fetch操作...")
             fetch_info = origin.fetch()
             logger.debug(f"Fetch结果: {[str(info) for info in fetch_info]}")
-            
+
             # 执行pull（实际上是merge）
             active_branch = repo.active_branch
             tracking_branch = active_branch.tracking_branch()
-            
+
             if tracking_branch:
                 # 检查是否需要更新
-                commits_behind = list(repo.iter_commits(f'{active_branch}..{tracking_branch}'))
-                commits_ahead = list(repo.iter_commits(f'{tracking_branch}..{active_branch}'))
-                
+                commits_behind = list(
+                    repo.iter_commits(f"{active_branch}..{tracking_branch}")
+                )
+                commits_ahead = list(
+                    repo.iter_commits(f"{tracking_branch}..{active_branch}")
+                )
+
                 if not commits_behind and not commits_ahead:
                     logger.info("代码已是最新")
                     return True, repo_path
@@ -291,7 +304,9 @@ class GitClient:
                     # 执行merge
                     try:
                         repo.git.merge(tracking_branch)
-                        logger.info(f"Git pull成功，合并了 {len(commits_behind)} 个提交")
+                        logger.info(
+                            f"Git pull成功，合并了 {len(commits_behind)} 个提交"
+                        )
                         return True, repo_path
                     except git.exc.GitCommandError as e:
                         logger.error(f"Git merge失败: {e}")
@@ -299,7 +314,7 @@ class GitClient:
             else:
                 logger.warning("当前分支没有设置跟踪分支")
                 return False, None
-                
+
         except git.exc.InvalidGitRepositoryError:
             logger.error(f"无效的Git仓库: {repo_path}")
             return False, None
@@ -336,23 +351,23 @@ class GitClient:
         if not GITPYTHON_AVAILABLE:
             logger.error("GitPython库不可用，无法创建分支")
             return False
-            
+
         try:
             repo = Repo(repo_path)
-            
+
             # 检查分支是否已存在
             if branch_name in repo.heads:
                 logger.info(f"分支已存在，切换到: {branch_name}")
                 repo.heads[branch_name].checkout()
                 return True
-            
+
             # 创建并切换到新分支
             new_branch = repo.create_head(branch_name)
             new_branch.checkout()
-            
+
             logger.info(f"分支创建成功: {branch_name}")
             return True
-            
+
         except git.exc.GitCommandError as e:
             logger.error(f"GitPython创建分支失败: {e}")
             return False
@@ -365,10 +380,10 @@ class GitClient:
         if not GITPYTHON_AVAILABLE:
             logger.error("GitPython库不可用，无法提交更改")
             return False
-            
+
         try:
             repo = Repo(repo_path)
-            
+
             # 添加文件到暂存区
             for file in files:
                 try:
@@ -377,17 +392,17 @@ class GitClient:
                 except Exception as e:
                     logger.error(f"添加文件失败 {file}: {e}")
                     return False
-            
+
             # 检查是否有更改需要提交
             if not repo.index.diff("HEAD"):
                 logger.warning("没有更改需要提交")
                 return True
-            
+
             # 提交更改
             commit = repo.index.commit(message)
             logger.info(f"提交成功: {message} (commit: {commit.hexsha[:8]})")
             return True
-            
+
         except git.exc.GitCommandError as e:
             logger.error(f"GitPython提交失败: {e}")
             return False
@@ -400,19 +415,21 @@ class GitClient:
         if not GITPYTHON_AVAILABLE:
             logger.error("GitPython库不可用，无法推送分支")
             return False
-            
+
         try:
             repo = Repo(repo_path)
-            
+
             if not repo.remotes:
                 logger.error("没有配置远程仓库")
                 return False
-                
+
             origin = repo.remotes.origin
-            
+
             # 推送分支到远程，并设置跟踪
-            push_info = origin.push(f"refs/heads/{branch_name}:refs/heads/{branch_name}")
-            
+            push_info = origin.push(
+                f"refs/heads/{branch_name}:refs/heads/{branch_name}"
+            )
+
             # 检查推送结果
             for info in push_info:
                 if info.flags & info.ERROR:
@@ -422,21 +439,154 @@ class GitClient:
                     logger.info(f"分支已是最新: {branch_name}")
                 elif info.flags & (info.NEW_TAG | info.NEW_HEAD | info.FAST_FORWARD):
                     logger.info(f"分支推送成功: {branch_name}")
-            
+
             # 设置本地分支跟踪远程分支
             if branch_name in repo.heads:
                 local_branch = repo.heads[branch_name]
                 remote_ref = f"origin/{branch_name}"
                 if remote_ref in repo.refs:
                     local_branch.set_tracking_branch(repo.refs[remote_ref])
-            
+
             return True
-            
+
         except git.exc.GitCommandError as e:
             logger.error(f"GitPython推送分支失败: {e}")
             return False
         except Exception as e:
             logger.error(f"推送分支异常: {e}")
+            return False
+
+    def checkout_branch(self, repo_path: Path, branch_name: str) -> bool:
+        """
+        切换到指定分支
+
+        Args:
+            repo_path: 仓库路径
+            branch_name: 分支名称
+
+        Returns:
+            切换是否成功
+        """
+        try:
+            if not GITPYTHON_AVAILABLE:
+                logger.error("GitPython库未安装，无法切换分支")
+                return False
+
+            repo = Repo(repo_path)
+
+            # 检查是否已在目标分支上
+            if repo.active_branch.name == branch_name:
+                logger.debug(f"已在目标分支上: {branch_name}")
+                return True
+
+            # 检查分支是否存在于本地
+            if branch_name in repo.heads:
+                # 本地分支存在，直接切换
+                repo.heads[branch_name].checkout()
+                logger.info(f"切换到本地分支: {branch_name}")
+            else:
+                # 检查远程分支是否存在
+                remote_branch = f"origin/{branch_name}"
+                if remote_branch in repo.refs:
+                    # 从远程分支创建本地分支
+                    repo.git.checkout("-b", branch_name, remote_branch)
+                    logger.info(f"从远程分支创建并切换到: {branch_name}")
+                else:
+                    logger.error(f"分支不存在: {branch_name}")
+                    return False
+
+            return True
+
+        except git.exc.GitCommandError as e:
+            logger.error(f"切换分支失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"切换分支异常: {e}")
+            return False
+
+    def pull_latest(self, repo_path: Path) -> bool:
+        """
+        拉取当前分支的最新代码
+
+        Args:
+            repo_path: 仓库路径
+
+        Returns:
+            拉取是否成功
+        """
+        try:
+            if not GITPYTHON_AVAILABLE:
+                logger.error("GitPython库未安装，无法拉取代码")
+                return False
+
+            repo = Repo(repo_path)
+            origin = repo.remotes.origin
+
+            # 拉取最新代码
+            pull_info = origin.pull()
+
+            for info in pull_info:
+                if info.flags & info.ERROR:
+                    logger.error(f"拉取代码失败: {info.note}")
+                    return False
+                elif info.flags & info.UP_TO_DATE:
+                    logger.info("代码已是最新")
+                elif info.flags & (info.NEW_TAG | info.NEW_HEAD | info.FAST_FORWARD):
+                    logger.info("成功拉取最新代码")
+
+            return True
+
+        except git.exc.GitCommandError as e:
+            logger.error(f"拉取代码失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"拉取代码异常: {e}")
+            return False
+
+    def delete_branch(self, repo_path: Path, branch_name: str) -> bool:
+        """
+        删除本地分支
+
+        Args:
+            repo_path: 仓库路径
+            branch_name: 分支名称
+
+        Returns:
+            删除是否成功
+        """
+        try:
+            if not GITPYTHON_AVAILABLE:
+                logger.warning("GitPython库未安装，无法删除分支")
+                return False
+
+            repo = Repo(repo_path)
+
+            # 检查分支是否存在
+            if branch_name not in repo.heads:
+                logger.warning(f"分支不存在，无需删除: {branch_name}")
+                return True
+
+            # 确保不在要删除的分支上
+            if repo.active_branch.name == branch_name:
+                # 切换到默认分支
+                default_branch = "main" if "main" in repo.heads else "master"
+                if default_branch in repo.heads:
+                    repo.heads[default_branch].checkout()
+                    logger.info(f"切换到 {default_branch} 分支以删除 {branch_name}")
+                else:
+                    logger.error("无法找到默认分支进行切换")
+                    return False
+
+            # 删除分支
+            repo.delete_head(branch_name, force=True)
+            logger.info(f"成功删除分支: {branch_name}")
+            return True
+
+        except git.exc.GitCommandError as e:
+            logger.error(f"删除分支失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"删除分支异常: {e}")
             return False
 
 

@@ -112,54 +112,149 @@ class AICodeFixer:
                 logger.error(f"准备Git仓库失败: {project_name}")
                 return False
 
-            # 创建修复分支
-            branch_name = f"fix/sonar-critical-{int(time.time())}"
-            if not self.git_client.create_branch(repo_path, branch_name):
-                logger.error("创建修复分支失败")
-                return False
-
-            # 处理每个问题
-            modified_files = []
+            # 处理每个问题，为每个问题创建独立的MR
+            successful_fixes = 0
             for issue in issues:
-                if self._fix_single_issue(issue, repo_path):
-                    relative_path = issue.component.split(":")[-1]  # 获取相对路径
-                    modified_files.append(relative_path)
-                    # 立即提交当前问题的修复
-                    if not self._commit_single_issue_fix(
-                        repo_path, issue, relative_path
-                    ):
-                        logger.error(f"提交问题 {issue.key} 的修复失败")
-                        return False
+                if self._fix_single_issue_with_mr(issue, repo_path, repo_info):
+                    successful_fixes += 1
+                else:
+                    logger.error(f"修复问题失败: {issue.key}")
+                    # 继续处理下一个问题，不中断整个流程
 
-            if not modified_files:
-                logger.warning("没有文件被修复")
+            if successful_fixes == 0:
+                logger.warning("没有问题被成功修复")
                 return False
 
-            # 推送分支
-            if not self.git_client.push_branch(repo_path, branch_name):
-                logger.error("推送分支失败")
-                return False
-
-            # 创建Merge Request
-            commit_info = self._generate_commit_info(issues)
-            mr_result = self.gitlab_client.create_merge_request(
-                project_id=repo_info["id"],
-                source_branch=branch_name,
-                target_branch=repo_info["default_branch"],
-                title=commit_info["mr_title"],
-                description=commit_info["mr_description"],
-                labels=["SonarQube", "Critical-Fix", "AI-Generated"],
-            )
-
-            if not mr_result:
-                logger.error("创建Merge Request失败")
-                return False
-
-            logger.info(f"成功创建Merge Request: {mr_result['url']}")
+            logger.info(f"成功修复并创建MR的问题数量: {successful_fixes}/{len(issues)}")
             return True
 
         except Exception as e:
             logger.error(f"处理项目问题失败: {e}")
+            return False
+
+    def _fix_single_issue_with_mr(
+        self, issue: SonarIssue, repo_path: Path, repo_info: dict
+    ) -> bool:
+        """
+        修复单个问题并为其创建独立的MR
+
+        Args:
+            issue: SonarQube问题
+            repo_path: 仓库路径
+            repo_info: 仓库信息
+
+        Returns:
+            修复和MR创建是否成功
+        """
+        branch_name = None
+        try:
+            logger.info(f"开始为问题创建独立修复分支: {issue.key}")
+
+            # 为每个问题创建独立的分支
+            branch_name = f"fix/sonar-{issue.key.replace(':', '-')}-{int(time.time())}"
+
+            # 确保在主分支上
+            if not self.git_client.checkout_branch(
+                repo_path, repo_info["default_branch"]
+            ):
+                logger.error(f"切换到主分支失败: {repo_info['default_branch']}")
+                return False
+
+            # 拉取最新代码
+            if not self.git_client.pull_latest(repo_path):
+                logger.error("拉取最新代码失败")
+                return False
+
+            # 创建新分支
+            if not self.git_client.create_branch(repo_path, branch_name):
+                logger.error(f"创建分支失败: {branch_name}")
+                return False
+
+            # 修复问题
+            if not self._fix_single_issue(issue, repo_path):
+                logger.error(f"修复问题失败: {issue.key}")
+                return False
+
+            # 提交修复
+            relative_path = issue.component.split(":")[-1]
+            commit_message = self._generate_single_issue_commit_message(issue)
+
+            if not self.git_client.commit_changes(
+                repo_path, [relative_path], commit_message
+            ):
+                logger.error(f"提交修复失败: {issue.key}")
+                return False
+
+            # 推送分支
+            if not self.git_client.push_branch(repo_path, branch_name):
+                logger.error(f"推送分支失败: {branch_name}")
+                return False
+
+            # 创建MR
+            mr_info = self._generate_single_issue_mr_info(issue)
+            mr_result = self.gitlab_client.create_merge_request(
+                project_id=repo_info["id"],
+                source_branch=branch_name,
+                target_branch=repo_info["default_branch"],
+                title=mr_info["title"],
+                description=mr_info["description"],
+                labels=["SonarQube", "Critical-Fix", "AI-Generated", issue.rule],
+            )
+
+            # 判断MR创建结果
+            if mr_result:
+                logger.info(f"成功为问题 {issue.key} 创建MR: {mr_result['url']}")
+                return True
+            else:
+                logger.error(f"创建MR失败: {issue.key}")
+                return False
+
+        except Exception as e:
+            logger.error(f"为问题 {issue.key} 创建独立MR失败: {e}")
+            return False
+        finally:
+            # 无论成功还是失败，都清理本地分支
+            if branch_name:
+                try:
+                    self._cleanup_branch(
+                        repo_path, branch_name, repo_info["default_branch"]
+                    )
+                except Exception as cleanup_error:
+                    logger.warning(f"分支清理过程中发生异常: {cleanup_error}")
+                    # 不影响主流程的返回结果
+
+    def _cleanup_branch(
+        self, repo_path: Path, branch_name: str, default_branch: str
+    ) -> bool:
+        """
+        清理本地分支
+
+        Args:
+            repo_path: 仓库路径
+            branch_name: 要清理的分支名称
+            default_branch: 默认分支名称
+
+        Returns:
+            清理是否成功
+        """
+        try:
+            logger.info(f"开始清理本地分支: {branch_name}")
+
+            # 切换到默认分支
+            if not self.git_client.checkout_branch(repo_path, default_branch):
+                logger.warning(f"切换到默认分支失败: {default_branch}")
+                return False
+
+            # 删除本地分支
+            if self.git_client.delete_branch(repo_path, branch_name):
+                logger.info(f"成功清理本地分支: {branch_name}")
+                return True
+            else:
+                logger.warning(f"清理本地分支失败: {branch_name}")
+                return False
+
+        except Exception as e:
+            logger.warning(f"清理分支异常: {e}")
             return False
 
     def _fix_single_issue(self, issue: SonarIssue, repo_path: Path) -> bool:
@@ -296,6 +391,79 @@ class AICodeFixer:
             "commit_message": commit_message,
             "mr_title": f"fix(sonar): 修复 {issue_count} 个Critical问题",
             "mr_description": mr_description,
+        }
+
+    def _generate_single_issue_commit_message(self, issue: SonarIssue) -> str:
+        """生成单个问题的提交信息"""
+        commit_message = f"fix(sonar): 修复 {issue.rule} 问题\n\n"
+        commit_message += f"- 问题描述: {issue.message}\n"
+        commit_message += f"- 文件: {issue.component}\n"
+        commit_message += f"- 行数: {issue.line}\n"
+        commit_message += f"- 严重程度: {issue.severity}\n"
+        commit_message += f"- Issue Key: {issue.key}\n\n"
+        commit_message += "通过AI自动分析和修复生成"
+        return commit_message
+
+    def _generate_single_issue_mr_info(self, issue: SonarIssue) -> Dict[str, str]:
+        """生成单个问题的MR信息"""
+
+        # 获取规则的友好名称
+        rule_name = (
+            issue.rule_info.get("name", issue.rule) if issue.rule_info else issue.rule
+        )
+
+        title = f"fix(sonar): 修复 {issue.rule} - {rule_name}"
+
+        description = f"""# SonarQube问题修复
+
+## 问题概述
+- **Issue Key**: `{issue.key}`
+- **规则**: `{issue.rule}`
+- **严重程度**: `{issue.severity}`
+- **问题描述**: {issue.message}
+
+## 修复详情
+- **文件**: `{issue.component}`
+- **行数**: {issue.line}
+- **修复方式**: AI自动分析和修复
+
+## 规则说明"""
+
+        # 添加规则详细信息
+        if issue.rule_info:
+            description += f"""
+- **规则名称**: {issue.rule_info.get('name', 'N/A')}
+- **规则类型**: {issue.rule_info.get('type', 'N/A')}
+- **标签**: {', '.join(issue.rule_info.get('tags', []))}
+
+### 规则描述
+{issue.rule_info.get('htmlDesc', '无详细描述')}
+"""
+        else:
+            description += "\n- 无可用的规则详细信息"
+
+        description += f"""
+
+## 代码变更
+此MR包含针对以下代码片段的修复：
+
+```
+{issue.code_snippet}
+```
+
+## 验证建议
+1. 检查修复代码是否符合编码规范
+2. 验证修复是否解决了SonarQube报告的问题
+3. 确认没有引入新的问题或副作用
+4. 运行相关的单元测试
+
+---
+*本MR由AI自动生成，请仔细审查修改内容。*
+"""
+
+        return {
+            "title": title,
+            "description": description,
         }
 
     def _commit_single_issue_fix(
