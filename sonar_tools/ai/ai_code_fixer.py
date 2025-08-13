@@ -87,7 +87,7 @@ class AICodeFixer:
         issues_by_project = {}
         
         for issue in issues:
-            project_name = issue.project_name
+            project_name = issue.project
             if project_name not in issues_by_project:
                 issues_by_project[project_name] = []
             issues_by_project[project_name].append(issue)
@@ -170,7 +170,7 @@ class AICodeFixer:
                 "rule": issue.rule,
                 "message": issue.message,
                 "component": issue.component,
-                "project": issue.project_name,
+                "project": issue.project,
                 "severity": issue.severity,
                 "line": issue.line,
                 "code_snippet": issue.code_snippet,
