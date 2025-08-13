@@ -293,9 +293,6 @@ class SonarQubeClient:
             logger.debug(f"通过 issue_snippets 接口获取问题 {issue_key} 的代码片段...")
             response = self._make_request("sources/issue_snippets", params)
 
-            # 解析返回的代码片段数据
-            # 响应格式: {"component_key": {"component": {...}, "sources": [{"line": 1, "code": "..."}]}}
-
             if not response:
                 logger.debug(f"问题 {issue_key} 没有返回代码片段数据")
                 return "无代码片段信息"
