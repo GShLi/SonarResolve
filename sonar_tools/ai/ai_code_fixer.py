@@ -42,7 +42,6 @@ class AICodeFixer:
 
             # 初始化Git相关客户端
             self.git_client = GitClient()
-            self.auto_fix_processor = AutoFixProcessor()
 
             # 初始化AI客户端
             self.ai_client = LangChainClient()
@@ -213,7 +212,7 @@ class AICodeFixer:
                 "rule": issue.rule
             }
 
-            if self.auto_fix_processor._apply_fix(file_path, fix_data):
+            if self._apply_fix(file_path, fix_data):
                 logger.info(f"成功修复问题: {issue.key}")
                 return True
             else:
