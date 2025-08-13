@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..clients.git_client import AutoFixProcessor, GitClient, GitLabManager
+from ..clients.git_client import AutoFixProcessor, GitClient, GitLabClient
 from ..clients.sonarqube_client import SonarQubeClient
 from ..core.config import Config
 from ..core.models import SonarIssue
@@ -36,12 +36,14 @@ class AICodeFixer:
         try:
             # 初始化SonarQube客户端
             self.sonar_client = SonarQubeClient(
-                self.config.SONARQUBE_URL,
-                self.config.SONARQUBE_TOKEN
+                self.config.SONARQUBE_URL, self.config.SONARQUBE_TOKEN
             )
 
             # 初始化Git相关客户端
             self.git_client = GitClient()
+
+            # 创建GitLab MR管理器
+            self.gitlab_client = GitLabClient()
 
             # 初始化AI客户端
             self.ai_client = LangChainClient()
@@ -55,10 +57,10 @@ class AICodeFixer:
     def process_critical_issues(self, project_key: str = None) -> bool:
         """
         处理Critical问题
-        
+
         Args:
             project_key: 可选的项目Key，如果不提供则处理所有项目
-            
+
         Returns:
             处理是否成功
         """
@@ -71,7 +73,7 @@ class AICodeFixer:
 
             # 按项目分组处理问题
             issues_by_project = self._group_issues_by_project(issues)
-            
+
             for project_name, project_issues in issues_by_project.items():
                 self._process_project_issues(project_name, project_issues)
 
@@ -81,31 +83,34 @@ class AICodeFixer:
             logger.error(f"处理Critical问题失败: {e}")
             return False
 
-    def _group_issues_by_project(self, issues: List[SonarIssue]) -> Dict[str, List[SonarIssue]]:
+    def _group_issues_by_project(
+        self, issues: List[SonarIssue]
+    ) -> Dict[str, List[SonarIssue]]:
         """按项目分组问题"""
         issues_by_project = {}
-        
+
         for issue in issues:
             project_name = issue.project
             if project_name not in issues_by_project:
                 issues_by_project[project_name] = []
             issues_by_project[project_name].append(issue)
-            
+
         return issues_by_project
 
-    def _process_project_issues(self, project_name: str, issues: List[SonarIssue]) -> bool:
+    def _process_project_issues(
+        self, project_name: str, issues: List[SonarIssue]
+    ) -> bool:
         """处理单个项目的问题"""
         try:
             logger.info(f"开始处理项目 {project_name} 的问题，共 {len(issues)} 个")
 
             # 准备Git仓库
-            success, repo_path, repo_info = self.git_client.prepare_repository_for_project(project_name)
+            success, repo_path, repo_info = (
+                self.git_client.prepare_repository_for_project(project_name)
+            )
             if not success or not repo_path or not repo_info:
                 logger.error(f"准备Git仓库失败: {project_name}")
                 return False
-
-            # 创建GitLab MR管理器
-            gitlab_manager = GitLabManager(repo_info["id"])
 
             # 创建修复分支
             branch_name = f"fix/sonar-critical-{int(time.time())}"
@@ -119,15 +124,16 @@ class AICodeFixer:
                 if self._fix_single_issue(issue, repo_path):
                     relative_path = issue.component.split(":")[-1]  # 获取相对路径
                     modified_files.append(relative_path)
+                    # 提交更改
+                    commit_info = self._generate_commit_info(issues)
+                    if not self.git_client.commit_changes(
+                        repo_path, modified_files, commit_info["commit_message"]
+                    ):
+                        logger.error("提交更改失败")
+                        return False
 
             if not modified_files:
                 logger.warning("没有文件被修复")
-                return False
-
-            # 提交更改
-            commit_info = self._generate_commit_info(issues)
-            if not self.git_client.commit_changes(repo_path, modified_files, commit_info["commit_message"]):
-                logger.error("提交更改失败")
                 return False
 
             # 推送分支
@@ -136,13 +142,13 @@ class AICodeFixer:
                 return False
 
             # 创建Merge Request
-            mr_result = gitlab_manager.create_merge_request(
+            mr_result = self.gitlab_client.create_merge_request(
                 project_id=repo_info["id"],
                 source_branch=branch_name,
                 target_branch=repo_info["default_branch"],
                 title=commit_info["mr_title"],
                 description=commit_info["mr_description"],
-                labels=["SonarQube", "Critical-Fix", "AI-Generated"]
+                labels=["SonarQube", "Critical-Fix", "AI-Generated"],
             )
 
             if not mr_result:
@@ -171,7 +177,7 @@ class AICodeFixer:
                 "severity": issue.severity,
                 "line": issue.line,
                 "code_snippet": issue.code_snippet,
-                "rule_info": issue.rule_info
+                "rule_info": issue.rule_info,
             }
 
             # 分析问题
@@ -188,9 +194,7 @@ class AICodeFixer:
 
             # 验证修复
             validation_result = self.ai_client.validate_fix(
-                issue.code_snippet,
-                fix_result["fixed_code"],
-                issue_data
+                issue.code_snippet, fix_result["fixed_code"], issue_data
             )
 
             if not validation_result.get("compliance_check", False):
@@ -209,7 +213,7 @@ class AICodeFixer:
                 "line": issue.line,
                 "language": issue_data.get("language", ""),
                 "issue_key": issue.key,
-                "rule": issue.rule
+                "rule": issue.rule,
             }
 
             if self._apply_fix(file_path, fix_data):
@@ -227,28 +231,28 @@ class AICodeFixer:
         """生成提交信息"""
         issue_count = len(issues)
         rules = {issue.rule for issue in issues}
-        
+
         commit_message = f"fix: 修复 {issue_count} 个SonarQube Critical问题\n\n"
         commit_message += "修复的规则:\n" + "\n".join(f"- {rule}" for rule in rules)
-        
+
         mr_description = (
             f"# AI自动修复报告\n\n"
             f"本MR修复了 {issue_count} 个SonarQube Critical问题。\n\n"
             f"## 修复的问题\n"
         )
-        
+
         for issue in issues:
             mr_description += f"\n### {issue.rule}\n"
             mr_description += f"- 问题描述: {issue.message}\n"
             mr_description += f"- 文件: {issue.component}\n"
             mr_description += f"- 行数: {issue.line}\n"
-        
+
         mr_description += "\n\n请仔细review修改内容。"
-        
+
         return {
             "commit_message": commit_message,
             "mr_title": f"fix(sonar): 修复 {issue_count} 个Critical问题",
-            "mr_description": mr_description
+            "mr_description": mr_description,
         }
 
     def test_connection(self) -> bool:
@@ -306,7 +310,9 @@ class AICodeFixer:
             f"- {f}" for f in modified_files
         )
 
-        if not self.git_client.commit_changes(local_path, modified_files, commit_message):
+        if not self.git_client.commit_changes(
+            local_path, modified_files, commit_message
+        ):
             logger.error("提交更改失败")
             return False
 
@@ -354,9 +360,9 @@ class AICodeFixer:
             # 首先尝试AI智能应用（推荐方式）
             if self._try_ai_application(file_path, content, fix):
                 return True
-            
+
             logger.info("AI应用失败，回退到传统修复策略")
-            
+
             # 回退到传统的多策略修复方法
             strategies = []
 
@@ -385,12 +391,13 @@ class AICodeFixer:
         try:
             # 检查是否启用AI应用
             from ..core.config import Config
-            if not getattr(Config, 'AI_APPLY_FIXES', True):
+
+            if not getattr(Config, "AI_APPLY_FIXES", True):
                 logger.debug("AI应用修复已禁用")
                 return False
 
             fixed_code = fix.get("fixed_code", "")
-            
+
             # 构造问题数据
             issue_data = {
                 "component": str(file_path),
@@ -398,33 +405,39 @@ class AICodeFixer:
                 "language": fix.get("language", self._detect_language(file_path)),
                 "message": fix.get("message", "SonarQube Critical issue"),
                 "code_snippet": fix.get("code_snippet", ""),
-                "key": fix.get("key", f"issue_{file_path.name}")
+                "key": fix.get("key", f"issue_{file_path.name}"),
             }
-            
+
             # 使用AI应用修复
             result = self.ai_client.apply_code_fix(content, fixed_code, issue_data)
-            
+
             if result.get("success") and result.get("modified_content"):
                 confidence = result.get("confidence", 0)
-                threshold = getattr(Config, 'AI_APPLY_CONFIDENCE_THRESHOLD', 7)
-                
+                threshold = getattr(Config, "AI_APPLY_CONFIDENCE_THRESHOLD", 7)
+
                 if confidence >= threshold:  # 使用配置的信心阈值
                     # 写回文件
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(result["modified_content"])
-                    
-                    logger.info(f"AI应用修复成功 - 策略: {result.get('strategy_used')}, 信心: {confidence}/10")
+
+                    logger.info(
+                        f"AI应用修复成功 - 策略: {result.get('strategy_used')}, 信心: {confidence}/10"
+                    )
                     if result.get("warnings"):
                         logger.warning(f"AI应用警告: {', '.join(result['warnings'])}")
-                    
+
                     return True
                 else:
-                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
+                    logger.warning(
+                        f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法"
+                    )
                     return False
             else:
-                logger.debug(f"AI应用失败: {result.get('changes_summary', 'Unknown reason')}")
+                logger.debug(
+                    f"AI应用失败: {result.get('changes_summary', 'Unknown reason')}"
+                )
                 return False
-                
+
         except ImportError:
             logger.debug("AI组件未可用，使用传统修复方法")
             return False
@@ -436,18 +449,18 @@ class AICodeFixer:
         """根据文件扩展名检测编程语言"""
         extension = file_path.suffix.lower()
         language_map = {
-            '.py': 'python',
-            '.java': 'java',
-            '.js': 'javascript',
-            '.ts': 'typescript',
-            '.cs': 'csharp',
-            '.cpp': 'cpp',
-            '.c': 'c',
-            '.php': 'php',
-            '.rb': 'ruby',
-            '.go': 'go',
-            '.rs': 'rust',
-            '.kt': 'kotlin',
-            '.scala': 'scala'
+            ".py": "python",
+            ".java": "java",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".cs": "csharp",
+            ".cpp": "cpp",
+            ".c": "c",
+            ".php": "php",
+            ".rb": "ruby",
+            ".go": "go",
+            ".rs": "rust",
+            ".kt": "kotlin",
+            ".scala": "scala",
         }
-        return language_map.get(extension, 'unknown')
+        return language_map.get(extension, "unknown")

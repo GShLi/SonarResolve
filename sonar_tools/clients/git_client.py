@@ -440,11 +440,10 @@ class GitClient:
             return False
 
 
-class GitLabManager:
+class GitLabClient:
     """GitLab Merge Request管理器"""
 
-    def __init__(self, project_id: str = None):
-        self.project_id = project_id
+    def __init__(self):
         self.gitlab_url = Config.GITLAB_URL
         self.gitlab_token = Config.GITLAB_TOKEN
 
