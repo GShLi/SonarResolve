@@ -286,7 +286,16 @@ class LangChainClient:
             # 尝试解析JSON响应
             try:
                 result = json.loads(response)
-                logger.info(f"成功生成修复方案: {issue_data.get('key', 'Unknown')}")
+                
+                # 验证新的代码结构
+                if "fixed_code" in result and isinstance(result["fixed_code"], dict):
+                    logger.info(f"成功生成拆分格式修复方案: {issue_data.get('key', 'Unknown')}")
+                    fixed_code_info = result["fixed_code"]
+                    logger.debug(f"导入代码: {len(fixed_code_info.get('imports', ''))} 字符")
+                    logger.debug(f"函数代码: {len(fixed_code_info.get('function_code', ''))} 字符")
+                else:
+                    logger.info(f"成功生成修复方案: {issue_data.get('key', 'Unknown')}")
+                
                 return result
             except json.JSONDecodeError:
                 logger.warning("AI修复响应不是有效JSON，返回文本响应")
@@ -296,7 +305,11 @@ class LangChainClient:
                         "changes": "AI响应格式错误",
                         "impact": "未知",
                     },
-                    "fixed_code": "",
+                    "fixed_code": {
+                        "imports": "",
+                        "function_code": "",
+                        "full_code": ""
+                    },
                     "raw_response": response,
                 }
 
@@ -307,6 +320,11 @@ class LangChainClient:
                     "strategy": "修复失败",
                     "changes": str(e),
                     "impact": "未知",
+                },
+                "fixed_code": {
+                    "imports": "",
+                    "function_code": "",
+                    "full_code": ""
                 },
                 "error": str(e),
             }
@@ -361,14 +379,14 @@ class LangChainClient:
             }
 
     def apply_code_fix(
-        self, original_content: str, fixed_code: str, issue_data: Dict[str, Any]
+        self, original_content: str, fixed_code_data: Any, issue_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         使用AI智能应用代码修复
 
         Args:
             original_content: 原始文件内容
-            fixed_code: AI生成的修复代码
+            fixed_code_data: AI生成的修复代码（可能是字符串或包含拆分结构的字典）
             issue_data: SonarQube问题数据
 
         Returns:
@@ -380,7 +398,7 @@ class LangChainClient:
             # 构建代码应用提示词
             system_prompt = PromptTemplates.get_code_application_system_prompt()
             user_prompt = PromptTemplates.build_code_application_prompt(
-                original_content, fixed_code, issue_data
+                original_content, fixed_code_data, issue_data
             )
 
             # 发送请求

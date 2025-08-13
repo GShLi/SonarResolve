@@ -220,8 +220,23 @@ class AICodeFixer:
                 return False
 
             # 验证修复
+            fixed_code_data = fix_result.get("fixed_code")
+            if not fixed_code_data:
+                logger.error(f"修复方案中没有修复代码: {issue.key}")
+                return False
+
+            # 处理新旧代码格式的兼容性
+            if isinstance(fixed_code_data, dict):
+                # 新格式：拆分的代码结构
+                validation_code = fixed_code_data.get(
+                    "full_code"
+                ) or fixed_code_data.get("function_code", "")
+            else:
+                # 旧格式：字符串
+                validation_code = str(fixed_code_data)
+
             validation_result = self.ai_client.validate_fix(
-                issue.code_snippet, fix_result["fixed_code"], issue_data
+                issue.code_snippet, validation_code, issue_data
             )
 
             if not validation_result.get("compliance_check", False):
@@ -235,7 +250,7 @@ class AICodeFixer:
             # 构建修复数据，包含所有必要信息
             fix_data = {
                 "file_path": relative_path,
-                "fixed_code": fix_result["fixed_code"],
+                "fixed_code": fixed_code_data,  # 保持原始格式
                 "code_snippet": issue.code_snippet,
                 "line": issue.line,
                 "language": issue_data.get("language", ""),
@@ -400,13 +415,31 @@ class AICodeFixer:
 
     def _apply_smart_fix(self, file_path: Path, content: str, fix: dict) -> bool:
         """智能应用代码修复（支持AI应用和传统方法）"""
-        # TODO: 该方法需要重写
         try:
             # 获取修复信息
-            fixed_code = fix.get("fixed_code", "").strip()
-            if not fixed_code:
+            fixed_code_data = fix.get("fixed_code")
+            if not fixed_code_data:
                 logger.error("没有有效的修复代码")
                 return False
+
+            # 处理新旧代码格式
+            if isinstance(fixed_code_data, dict):
+                # 新格式：拆分的代码结构
+                logger.info("检测到拆分格式的修复代码")
+                imports_code = fixed_code_data.get("imports", "")
+                function_code = fixed_code_data.get("function_code", "")
+                full_code = fixed_code_data.get("full_code", "")
+
+                if imports_code:
+                    logger.info(f"包含导入语句: {len(imports_code)} 字符")
+                if function_code:
+                    logger.info(f"包含函数代码: {len(function_code)} 字符")
+            else:
+                # 旧格式：字符串
+                fixed_code_data = str(fixed_code_data).strip()
+                if not fixed_code_data:
+                    logger.error("修复代码为空")
+                    return False
 
             # 首先尝试AI智能应用（推荐方式）
             if self._try_ai_application(file_path, content, fix):
@@ -447,7 +480,10 @@ class AICodeFixer:
                 logger.debug("AI应用修复已禁用")
                 return False
 
-            fixed_code = fix.get("fixed_code", "")
+            fixed_code_data = fix.get("fixed_code")
+            if not fixed_code_data:
+                logger.error("没有修复代码数据")
+                return False
 
             # 构造问题数据
             issue_data = {
@@ -460,7 +496,7 @@ class AICodeFixer:
             }
 
             # 使用AI应用修复
-            result = self.ai_client.apply_code_fix(content, fixed_code, issue_data)
+            result = self.ai_client.apply_code_fix(content, fixed_code_data, issue_data)
 
             if result.get("success") and result.get("modified_content"):
                 confidence = result.get("confidence", 0)

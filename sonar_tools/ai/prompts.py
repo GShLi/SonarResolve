@@ -72,7 +72,11 @@ class PromptTemplates:
     "changes": "具体改动说明",
     "impact": "影响范围评估"
   },
-  "fixed_code": "修复后的完整代码",
+  "fixed_code": {
+    "imports": "新增或修改的导入语句/包含语句（如Python的import、Java的import、C的#include等）",
+    "function_code": "修复后的函数或代码块（不包含导入语句）",
+    "full_code": "完整的修复后代码（包含导入和函数代码，用作备用）"
+  },
   "validation": {
     "sonar_compliant": true/false,
     "functionality_preserved": true/false,
@@ -80,6 +84,12 @@ class PromptTemplates:
   },
   "commit_message": "简短的提交信息"
 }
+
+重要说明：
+- imports字段：只包含修复时新增的或需要修改的导入语句，如果无需新增导入，则为空字符串
+- function_code字段：只包含修复后的核心代码块（函数、方法或代码段），不包含导入语句
+- full_code字段：包含完整的修复后代码，作为完整性检查的备用方案
+- 这种拆分有助于后续的智能代码合并操作
 
 请确保修复后的代码能够通过SonarQube规则检查，并保持原有功能完整性。"""
 
@@ -278,13 +288,33 @@ class PromptTemplates:
 
     @staticmethod
     def build_code_application_prompt(
-        original_content: str, fixed_code: str, issue_data: Dict[str, Any]
+        original_content: str,
+        fixed_code_data: Dict[str, Any],
+        issue_data: Dict[str, Any],
     ) -> str:
         """构建代码应用提示词"""
         language = issue_data.get("language", "unknown")
         file_path = issue_data.get("component", "Unknown")
         line_number = issue_data.get("line", "Unknown")
         problem_description = issue_data.get("message", "No description")
+
+        # 处理新的代码结构
+        if isinstance(fixed_code_data, dict) and "fixed_code" in fixed_code_data:
+            # 新格式：拆分的代码结构
+            fixed_code_info = fixed_code_data["fixed_code"]
+            imports_code = fixed_code_info.get("imports", "")
+            function_code = fixed_code_info.get("function_code", "")
+            full_code = fixed_code_info.get("full_code", "")
+        elif isinstance(fixed_code_data, str):
+            # 旧格式：兼容性处理
+            full_code = fixed_code_data
+            imports_code = ""
+            function_code = fixed_code_data
+        else:
+            # 兜底处理
+            full_code = str(fixed_code_data)
+            imports_code = ""
+            function_code = str(fixed_code_data)
 
         prompt = f"""请将AI修复的代码应用到原始文件中：
 
@@ -299,9 +329,20 @@ class PromptTemplates:
 {original_content}
 ```
 
-## AI修复后的代码
+## AI修复后的代码（拆分格式）
+### 新增/修改的导入语句:
 ```{language}
-{fixed_code}
+{imports_code if imports_code else "// 无新增导入"}
+```
+
+### 修复后的函数/代码块:
+```{language}
+{function_code}
+```
+
+### 完整修复代码（备用参考）:
+```{language}
+{full_code}
 ```
 
 ## 原始问题代码片段（来自SonarQube）
@@ -331,12 +372,18 @@ class PromptTemplates:
         prompt += """
 请分析原始文件和修复代码，找到最佳的应用方式，并返回修改后的完整文件内容。
 
+## 代码合并策略：
+1. **导入语句处理**：将新增的导入语句添加到文件开头的导入区域，保持原有导入的顺序和格式
+2. **函数代码替换**：使用修复后的函数代码替换原有的问题代码
+3. **智能合并**：优先使用拆分后的代码进行精确合并，如果失败则使用完整代码作为备用
+
 注意事项：
 1. 修复代码可能包含行号标记（如 "→ 123: "），需要清理
 2. 要保持原文件的导入语句、注释、格式等
 3. 只修改必要的部分，不要改动无关代码
 4. 确保修复后的代码语法正确且逻辑完整
-5. 如果问题在函数内部，请确保修改范围不超出函数边界"""
+5. 如果问题在函数内部，请确保修改范围不超出函数边界
+6. 合理处理导入语句的位置和去重，避免重复导入"""
 
         return prompt
 
