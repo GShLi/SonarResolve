@@ -9,7 +9,7 @@ from typing import Any, Dict
 
 class PromptTemplates:
     """AI提示词模板管理类"""
-    
+
     @staticmethod
     def get_analysis_system_prompt() -> str:
         """获取问题分析的系统提示词"""
@@ -20,6 +20,8 @@ class PromptTemplates:
 2. 问题的根本原因
 3. 潜在的风险等级
 4. 修复的复杂度评估
+5. 问题范围分析（特别关注是否是函数内部问题）
+6. 如果是函数内部问题，需要分析函数的代码边界
 
 你必须以JSON格式回复，包含以下字段：
 {
@@ -29,9 +31,21 @@ class PromptTemplates:
     "risk_level": "低/中/高",
     "complexity": "修复复杂度(简单/中等/复杂)",
     "impact_scope": "影响范围评估"
+  },
+  "scope": {
+    "scope_type": "问题范围类型(function_internal/class_method/global/file_level)",
+    "is_function_internal": true/false,
+    "function_name": "如果是函数内部问题，提供函数名",
+    "estimated_function_start_line": "预估函数开始行号(基于代码片段分析)",
+    "estimated_function_end_line": "预估函数结束行号(基于代码片段分析)",
+    "context_analysis": "基于提供的代码片段对函数边界的分析说明"
   }
 }
 
+重要说明：
+- 如果问题在函数内部，请仔细分析代码片段，推断函数的可能边界
+- 基于代码缩进、语法结构等特征来估算函数范围
+- 范围分析将用于后续的精确代码修复和合并操作
 请确保分析准确、专业，便于后续的自动修复处理。"""
 
     @staticmethod
@@ -136,6 +150,9 @@ class PromptTemplates:
     @staticmethod
     def build_analysis_prompt(issue_data: Dict[str, Any]) -> str:
         """构建问题分析提示词"""
+        code_snippet = issue_data.get("code_snippet", "无代码片段")
+        issue_line = issue_data.get("line", "Unknown")
+
         return f"""请分析以下SonarQube Critical问题：
 
 ## 问题信息
@@ -143,7 +160,7 @@ class PromptTemplates:
 - **严重级别**: {issue_data.get('severity', 'Unknown')}
 - **问题描述**: {issue_data.get('message', 'No description')}
 - **文件路径**: {issue_data.get('component', 'Unknown')}
-- **问题行数**: {issue_data.get('line', 'Unknown')}
+- **问题行数**: {issue_line}
 - **代码语言**: {issue_data.get('language', 'Unknown')}
 
 ## 规则详细信息
@@ -151,16 +168,28 @@ class PromptTemplates:
 
 ## 问题代码上下文
 ```
-{issue_data.get('code_snippet', '无代码片段')}
+{code_snippet}
 ```
 
-请根据以上信息进行详细的问题分析，并以JSON格式返回结果。"""
+## 范围分析指导
+请特别关注以下几点：
+1. 分析问题是否发生在函数/方法内部
+2. 如果是函数内部问题，请基于代码片段推断函数的边界：
+   - 查找函数定义关键字（如 def, function, func 等）
+   - 分析代码缩进结构来确定函数范围
+   - 查找函数结束标志（如 return 语句、函数末尾等）
+   - 估算函数在原文件中的大致行号范围
+3. 考虑问题的影响范围（仅影响当前函数还是可能影响其他部分）
+
+请根据以上信息进行详细的问题分析，特别是范围分析，并以JSON格式返回结果。"""
 
     @staticmethod
-    def build_fix_prompt(issue_data: Dict[str, Any], analysis_result: Dict[str, Any] = None) -> str:
+    def build_fix_prompt(
+        issue_data: Dict[str, Any], analysis_result: Dict[str, Any] = None
+    ) -> str:
         """构建代码修复提示词"""
-        language = issue_data.get('language', 'unknown')
-        
+        language = issue_data.get("language", "unknown")
+
         prompt = f"""请修复以下SonarQube问题：
 
 ## 修复任务
@@ -185,9 +214,32 @@ class PromptTemplates:
 {json.dumps(analysis_result, indent=2, ensure_ascii=False)}
 """
 
+        # 添加函数范围信息
+        function_scope = issue_data.get("function_scope")
+        if function_scope and function_scope.get("success"):
+            prompt += f"""
+## 函数范围信息
+**函数名称**: {function_scope.get('function_name', 'Unknown')}
+**函数签名**: {function_scope.get('function_signature', 'Unknown')}
+**函数范围**: 第{function_scope.get('start_line', 'Unknown')}-{function_scope.get('end_line', 'Unknown')}行
+**范围类型**: {function_scope.get('scope_type', 'Unknown')}
+
+**范围分析说明**: {function_scope.get('analysis_notes', '无说明')}
+
+重要提示：
+1. 该问题位于函数内部，修复时请确保不破坏函数的整体结构
+2. 如果需要修改函数签名或函数整体逻辑，请在修复方案中详细说明
+3. 优先进行局部修复，避免影响函数的其他部分
+"""
+
         prompt += f"""
-请根据{language}语言的最佳实践，提供完整的修复方案，并以JSON格式返回结果。"""
-        
+请根据{language}语言的最佳实践，提供完整的修复方案，并以JSON格式返回结果。
+
+如果问题在函数内部，请特别注意：
+- 保持函数的原始功能和接口不变
+- 尽量进行最小化修改
+- 确保修复不会影响函数的其他逻辑"""
+
         return prompt
 
     @staticmethod
@@ -226,17 +278,15 @@ class PromptTemplates:
 
     @staticmethod
     def build_code_application_prompt(
-        original_content: str, 
-        fixed_code: str, 
-        issue_data: Dict[str, Any]
+        original_content: str, fixed_code: str, issue_data: Dict[str, Any]
     ) -> str:
         """构建代码应用提示词"""
-        language = issue_data.get('language', 'unknown')
-        file_path = issue_data.get('component', 'Unknown')
-        line_number = issue_data.get('line', 'Unknown')
-        problem_description = issue_data.get('message', 'No description')
-        
-        return f"""请将AI修复的代码应用到原始文件中：
+        language = issue_data.get("language", "unknown")
+        file_path = issue_data.get("component", "Unknown")
+        line_number = issue_data.get("line", "Unknown")
+        problem_description = issue_data.get("message", "No description")
+
+        prompt = f"""请将AI修复的代码应用到原始文件中：
 
 ## 任务信息
 - **文件路径**: {file_path}
@@ -258,20 +308,45 @@ class PromptTemplates:
 ```{language}
 {issue_data.get('code_snippet', '无代码片段')}
 ```
+"""
 
+        # 添加函数范围信息
+        function_scope = issue_data.get("function_scope")
+        if function_scope and function_scope.get("success"):
+            prompt += f"""
+## 函数范围上下文
+- **函数名称**: {function_scope.get('function_name', 'Unknown')}
+- **函数范围**: 第{function_scope.get('start_line', 'Unknown')}-{function_scope.get('end_line', 'Unknown')}行
+- **函数类型**: {function_scope.get('scope_type', 'Unknown')}
+- **函数签名**: {function_scope.get('function_signature', 'Unknown')}
+
+**重要提示**:
+该问题位于函数内部，请特别注意：
+1. 修复范围应限制在指定的函数边界内
+2. 不要修改函数外的代码
+3. 保持函数的原始接口和整体结构
+4. 优先进行最小化的局部修复
+"""
+
+        prompt += """
 请分析原始文件和修复代码，找到最佳的应用方式，并返回修改后的完整文件内容。
 
 注意事项：
 1. 修复代码可能包含行号标记（如 "→ 123: "），需要清理
 2. 要保持原文件的导入语句、注释、格式等
 3. 只修改必要的部分，不要改动无关代码
-4. 确保修复后的代码语法正确且逻辑完整"""
+4. 确保修复后的代码语法正确且逻辑完整
+5. 如果问题在函数内部，请确保修改范围不超出函数边界"""
+
+        return prompt
 
     @staticmethod
-    def build_validation_prompt(original_code: str, fixed_code: str, issue_data: Dict[str, Any]) -> str:
+    def build_validation_prompt(
+        original_code: str, fixed_code: str, issue_data: Dict[str, Any]
+    ) -> str:
         """构建修复验证提示词"""
-        language = issue_data.get('language', 'unknown')
-        
+        language = issue_data.get("language", "unknown")
+
         return f"""请验证以下代码修复的质量：
 
 ## 验证任务
@@ -296,7 +371,9 @@ class PromptTemplates:
 请逐项检查修复质量，并以JSON格式返回验证结果。"""
 
     @staticmethod
-    def build_commit_prompt(issue_data: Dict[str, Any], fix_result: Dict[str, Any]) -> str:
+    def build_commit_prompt(
+        issue_data: Dict[str, Any], fix_result: Dict[str, Any]
+    ) -> str:
         """构建提交信息生成提示词"""
         return f"""请为以下代码修复生成Git提交信息和MR描述：
 

@@ -168,6 +168,9 @@ class AICodeFixer:
             logger.info(f"开始修复问题: {issue.key}")
 
             # 准备问题数据
+            relative_path = issue.component.split(":")[-1]  # 获取相对路径
+            full_file_path = repo_path / relative_path
+
             issue_data = {
                 "key": issue.key,
                 "rule": issue.rule,
@@ -178,6 +181,7 @@ class AICodeFixer:
                 "line": issue.line,
                 "code_snippet": issue.code_snippet,
                 "rule_info": issue.rule_info,
+                "language": self._detect_language(full_file_path),
             }
 
             # 分析问题
@@ -185,6 +189,29 @@ class AICodeFixer:
             if not analysis_result:
                 logger.error(f"问题分析失败: {issue.key}")
                 return False
+
+            # 如果分析结果显示是函数内部问题，进行精确的函数范围分析
+            scope_info = analysis_result.get("scope", {})
+            function_scope = None
+
+            if scope_info.get("is_function_internal") and full_file_path.exists():
+                logger.info(f"检测到函数内部问题，进行精确范围分析: {issue.key}")
+                function_scope = self.ai_client.analyze_function_scope(
+                    str(full_file_path), issue.line, issue_data["language"]
+                )
+
+                if function_scope.get("success") and function_scope.get(
+                    "function_found"
+                ):
+                    logger.info(
+                        f"精确函数范围: {function_scope.get('function_name')} "
+                        f"({function_scope.get('start_line')}-{function_scope.get('end_line')})"
+                    )
+
+                    # 将函数范围信息添加到问题数据中
+                    issue_data["function_scope"] = function_scope
+                else:
+                    logger.warning(f"精确函数范围分析失败: {issue.key}")
 
             # 生成修复方案
             fix_result = self.ai_client.fix_code_issue(issue_data, analysis_result)
