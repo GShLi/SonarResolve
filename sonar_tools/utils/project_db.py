@@ -286,8 +286,7 @@ class ProjectStatusDB:
                         """
                         INSERT OR REPLACE INTO sonar_issue 
                         (sonar_issue_key, jira_task_key, jira_project_key, 
-                         sonar_project_key, created_time)
-                         created_time, updated_time)
+                         sonar_project_key, created_time, updated_time)
                         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     """,
                         (
