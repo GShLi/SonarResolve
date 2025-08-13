@@ -110,9 +110,7 @@ class AICodeFixer:
 
             # 创建修复分支
             branch_name = f"fix/sonar-critical-{int(time.time())}"
-            from ..clients.git_client import GitManager
-            git_manager = GitManager(str(repo_path))
-            if not git_manager.create_branch(branch_name):
+            if not self.git_client.create_branch(repo_path, branch_name):
                 logger.error("创建修复分支失败")
                 return False
 
@@ -129,12 +127,12 @@ class AICodeFixer:
 
             # 提交更改
             commit_info = self._generate_commit_info(issues)
-            if not git_manager.commit_changes(modified_files, commit_info["commit_message"]):
+            if not self.git_client.commit_changes(repo_path, modified_files, commit_info["commit_message"]):
                 logger.error("提交更改失败")
                 return False
 
             # 推送分支
-            if not git_manager.push_branch(branch_name):
+            if not self.git_client.push_branch(repo_path, branch_name):
                 logger.error("推送分支失败")
                 return False
 
@@ -273,3 +271,184 @@ class AICodeFixer:
         except Exception as e:
             logger.error(f"连接测试失败: {e}")
             return False
+
+    def process_project_fixes(self, project_name: str, fixes: list) -> bool:
+        """处理项目的自动修复"""
+        # 准备仓库
+        (
+            success,
+            local_path,
+            repo_info,
+        ) = self.git_client.prepare_repository_for_project(project_name)
+
+        if not success:
+            logger.error(f"无法准备项目仓库: {project_name}")
+            return False
+
+        # 创建修复分支
+        branch_name = f"fix/sonar-issues-{int(time.time())}"
+        if not self.git_client.create_branch(local_path, branch_name):
+            logger.error("创建修复分支失败")
+            return False
+
+        # 应用修复
+        modified_files = []
+        for fix in fixes:
+            file_path = local_path / fix["file_path"]
+            if self._apply_fix(file_path, fix):
+                modified_files.append(fix["file_path"])
+
+        if not modified_files:
+            logger.warning("没有文件被修改")
+            return False
+
+        # 提交更改
+        commit_message = "自动修复SonarQube Critical问题\n\n修复的文件:\n" + "\n".join(
+            f"- {f}" for f in modified_files
+        )
+
+        if not self.git_client.commit_changes(local_path, modified_files, commit_message):
+            logger.error("提交更改失败")
+            return False
+
+        # 推送分支
+        if not self.git_client.push_branch(local_path, branch_name):
+            logger.error("推送分支失败")
+            return False
+
+        logger.info(f"自动修复完成，分支: {branch_name}")
+        return True
+
+    def _apply_fix(self, file_path: Path, fix: dict) -> bool:
+        """应用单个修复"""
+        try:
+            if not file_path.exists():
+                logger.error(f"文件不存在: {file_path}")
+                return False
+
+            # 读取文件内容
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # 智能应用修复
+            if self._apply_smart_fix(file_path, content, fix):
+                logger.info(f"应用修复成功: {file_path}")
+                return True
+            else:
+                logger.error(f"应用修复失败: {file_path}")
+                return False
+
+        except Exception as e:
+            logger.error(f"应用修复失败 {file_path}: {e}")
+            return False
+
+    def _apply_smart_fix(self, file_path: Path, content: str, fix: dict) -> bool:
+        """智能应用代码修复（支持AI应用和传统方法）"""
+        # TODO: 该方法需要重写
+        try:
+            # 获取修复信息
+            fixed_code = fix.get("fixed_code", "").strip()
+            if not fixed_code:
+                logger.error("没有有效的修复代码")
+                return False
+
+            # 首先尝试AI智能应用（推荐方式）
+            if self._try_ai_application(file_path, content, fix):
+                return True
+            
+            logger.info("AI应用失败，回退到传统修复策略")
+            
+            # 回退到传统的多策略修复方法
+            strategies = []
+
+            for strategy in strategies:
+                try:
+                    new_content = strategy(content, fix)
+                    if new_content and new_content != content:
+                        # 写回文件
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(new_content)
+                        logger.info(f"使用策略 {strategy.__name__} 修复成功")
+                        return True
+                except Exception as e:
+                    logger.debug(f"修复策略 {strategy.__name__} 失败: {e}")
+                    continue
+
+            logger.error("所有修复策略都失败了")
+            return False
+
+        except Exception as e:
+            logger.error(f"智能修复失败: {e}")
+            return False
+
+    def _try_ai_application(self, file_path: Path, content: str, fix: dict) -> bool:
+        """尝试使用AI智能应用修复"""
+        try:
+            # 检查是否启用AI应用
+            from ..core.config import Config
+            if not getattr(Config, 'AI_APPLY_FIXES', True):
+                logger.debug("AI应用修复已禁用")
+                return False
+
+            fixed_code = fix.get("fixed_code", "")
+            
+            # 构造问题数据
+            issue_data = {
+                "component": str(file_path),
+                "line": fix.get("line", 0),
+                "language": fix.get("language", self._detect_language(file_path)),
+                "message": fix.get("message", "SonarQube Critical issue"),
+                "code_snippet": fix.get("code_snippet", ""),
+                "key": fix.get("key", f"issue_{file_path.name}")
+            }
+            
+            # 使用AI应用修复
+            result = self.ai_client.apply_code_fix(content, fixed_code, issue_data)
+            
+            if result.get("success") and result.get("modified_content"):
+                confidence = result.get("confidence", 0)
+                threshold = getattr(Config, 'AI_APPLY_CONFIDENCE_THRESHOLD', 7)
+                
+                if confidence >= threshold:  # 使用配置的信心阈值
+                    # 写回文件
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(result["modified_content"])
+                    
+                    logger.info(f"AI应用修复成功 - 策略: {result.get('strategy_used')}, 信心: {confidence}/10")
+                    if result.get("warnings"):
+                        logger.warning(f"AI应用警告: {', '.join(result['warnings'])}")
+                    
+                    return True
+                else:
+                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
+                    return False
+            else:
+                logger.debug(f"AI应用失败: {result.get('changes_summary', 'Unknown reason')}")
+                return False
+                
+        except ImportError:
+            logger.debug("AI组件未可用，使用传统修复方法")
+            return False
+        except Exception as e:
+            logger.debug(f"AI应用异常: {e}")
+            return False
+
+    def _detect_language(self, file_path: Path) -> str:
+        """根据文件扩展名检测编程语言"""
+        extension = file_path.suffix.lower()
+        language_map = {
+            '.py': 'python',
+            '.java': 'java',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.cs': 'csharp',
+            '.cpp': 'cpp',
+            '.c': 'c',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.kt': 'kotlin',
+            '.scala': 'scala'
+        }
+        return language_map.get(extension, 'unknown')
