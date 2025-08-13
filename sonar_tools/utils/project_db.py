@@ -56,17 +56,41 @@ class ProjectStatusDB:
                 """
                 )
 
-                # 创建任务状态表 - 只记录已创建的任务
+                # 创建SonarQube问题跟踪表 - 记录问题处理状态
                 cursor.execute(
                     """
-                CREATE TABLE IF NOT EXISTS created_tasks (
+                CREATE TABLE IF NOT EXISTS sonar_issue (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sonar_issue_key TEXT UNIQUE NOT NULL,
                     jira_task_key TEXT NOT NULL,
                     jira_project_key TEXT NOT NULL,
                     sonar_project_key TEXT NOT NULL,
                     created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (sonar_project_key) REFERENCES created_projects (sonar_project_key)
+                )
+                """
+                )
+
+                # 创建MR提交记录表 - 记录每次MR提交的详细信息
+                cursor.execute(
+                    """
+                CREATE TABLE IF NOT EXISTS mr_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sonar_issue_key TEXT NOT NULL,
+                    mr_url TEXT NOT NULL,
+                    mr_iid TEXT,
+                    mr_title TEXT,
+                    mr_description TEXT,
+                    branch_name TEXT,
+                    source_branch TEXT,
+                    target_branch TEXT,
+                    mr_status TEXT DEFAULT 'created',
+                    rejection_reason TEXT,
+                    submitted_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_latest BOOLEAN DEFAULT TRUE,
+                    FOREIGN KEY (sonar_issue_key) REFERENCES sonar_issue (sonar_issue_key)
                 )
                 """
                 )
@@ -81,15 +105,37 @@ class ProjectStatusDB:
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_created_tasks_sonar_issue 
-                ON created_tasks (sonar_issue_key)
+                CREATE INDEX IF NOT EXISTS idx_sonar_issue_sonar_key 
+                ON sonar_issue (sonar_issue_key)
                 """
                 )
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_created_tasks_project 
-                ON created_tasks (sonar_project_key)
+                CREATE INDEX IF NOT EXISTS idx_sonar_issue_project 
+                ON sonar_issue (sonar_project_key)
+                """
+                )
+
+                # 创建MR记录表的索引
+                cursor.execute(
+                    """
+                CREATE INDEX IF NOT EXISTS idx_mr_records_sonar_issue 
+                ON mr_records (sonar_issue_key)
+                """
+                )
+
+                cursor.execute(
+                    """
+                CREATE INDEX IF NOT EXISTS idx_mr_records_status 
+                ON mr_records (mr_status)
+                """
+                )
+
+                cursor.execute(
+                    """
+                CREATE INDEX IF NOT EXISTS idx_mr_records_latest 
+                ON mr_records (is_latest)
                 """
                 )
 
@@ -188,13 +234,13 @@ class ProjectStatusDB:
 
     def is_task_created(self, sonar_issue_key: str) -> bool:
         """
-        检查任务是否已创建
+        检查SonarQube问题是否已创建
 
         Args:
             sonar_issue_key: SonarQube问题Key
 
         Returns:
-            True表示任务已创建，False表示未创建
+            True表示问题已创建，False表示未创建
         """
         try:
             with self.lock:
@@ -203,7 +249,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id FROM created_tasks 
+                        SELECT id FROM sonar_issue 
                         WHERE sonar_issue_key = ?
                     """,
                         (sonar_issue_key,),
@@ -212,7 +258,7 @@ class ProjectStatusDB:
                     return cursor.fetchone() is not None
 
         except Exception as e:
-            logger.error(f"检查任务创建状态失败: {e}")
+            logger.error(f"检查问题创建状态失败: {e}")
             return False
 
     def record_created_task(
@@ -223,7 +269,7 @@ class ProjectStatusDB:
         sonar_project_key: str,
     ):
         """
-        记录已创建的任务
+        记录已创建的SonarQube问题
 
         Args:
             sonar_issue_key: SonarQube问题Key
@@ -238,10 +284,11 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        INSERT OR REPLACE INTO created_tasks 
+                        INSERT OR REPLACE INTO sonar_issue 
                         (sonar_issue_key, jira_task_key, jira_project_key, 
                          sonar_project_key, created_time)
-                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                         created_time, updated_time)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     """,
                         (
                             sonar_issue_key,
@@ -253,11 +300,291 @@ class ProjectStatusDB:
 
                     conn.commit()
                     logger.debug(
-                        f"记录已创建任务: {sonar_issue_key} -> {jira_task_key}"
+                        f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}"
                     )
 
         except Exception as e:
-            logger.error(f"记录任务创建失败: {e}")
+            logger.error(f"记录问题创建失败: {e}")
+
+    def create_mr_record(
+        self,
+        sonar_issue_key: str,
+        mr_url: str,
+        mr_iid: str = None,
+        mr_title: str = None,
+        mr_description: str = None,
+        branch_name: str = None,
+        source_branch: str = None,
+        target_branch: str = None,
+        mr_status: str = "created",
+    ) -> bool:
+        """
+        创建MR提交记录
+
+        Args:
+            sonar_issue_key: SonarQube问题Key
+            mr_url: MR地址
+            mr_iid: MR的内部ID
+            mr_title: MR标题
+            mr_description: MR描述
+            branch_name: 分支名称
+            source_branch: 源分支
+            target_branch: 目标分支
+            mr_status: MR状态 (created, merged, closed, rejected)
+
+        Returns:
+            True表示创建成功，False表示失败
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    # 将之前的记录标记为非最新
+                    cursor.execute(
+                        """
+                        UPDATE mr_records 
+                        SET is_latest = FALSE, updated_time = CURRENT_TIMESTAMP
+                        WHERE sonar_issue_key = ? AND is_latest = TRUE
+                    """,
+                        (sonar_issue_key,),
+                    )
+
+                    # 插入新的MR记录
+                    cursor.execute(
+                        """
+                        INSERT INTO mr_records 
+                        (sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                         branch_name, source_branch, target_branch, mr_status,
+                         submitted_time, updated_time, is_latest)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
+                    """,
+                        (
+                            sonar_issue_key,
+                            mr_url,
+                            mr_iid,
+                            mr_title,
+                            mr_description,
+                            branch_name,
+                            source_branch,
+                            target_branch,
+                            mr_status,
+                        ),
+                    )
+
+                    conn.commit()
+                    logger.debug(f"创建MR记录: {sonar_issue_key} -> {mr_url}")
+                    return True
+
+        except Exception as e:
+            logger.error(f"创建MR记录失败: {e}")
+            return False
+
+    def update_mr_record_status(
+        self, mr_url: str, mr_status: str, rejection_reason: str = None
+    ) -> bool:
+        """
+        更新MR记录状态
+
+        Args:
+            mr_url: MR地址
+            mr_status: 新的MR状态 (created, merged, closed, rejected)
+            rejection_reason: 如果被驳回，记录驳回原因
+
+        Returns:
+            True表示更新成功，False表示失败
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    if rejection_reason:
+                        cursor.execute(
+                            """
+                            UPDATE mr_records 
+                            SET mr_status = ?, rejection_reason = ?, updated_time = CURRENT_TIMESTAMP
+                            WHERE mr_url = ?
+                        """,
+                            (mr_status, rejection_reason, mr_url),
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            UPDATE mr_records 
+                            SET mr_status = ?, updated_time = CURRENT_TIMESTAMP
+                            WHERE mr_url = ?
+                        """,
+                            (mr_status, mr_url),
+                        )
+
+                    conn.commit()
+                    if cursor.rowcount > 0:
+                        logger.debug(f"更新MR记录状态: {mr_url} -> {mr_status}")
+                        return True
+                    return False
+
+        except Exception as e:
+            logger.error(f"更新MR记录状态失败: {e}")
+            return False
+
+    def get_mr_records(self, sonar_issue_key: str) -> List[Dict[str, Any]]:
+        """
+        获取问题的所有MR记录
+
+        Args:
+            sonar_issue_key: SonarQube问题Key
+
+        Returns:
+            MR记录列表，按提交时间倒序排列
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                               branch_name, source_branch, target_branch, mr_status,
+                               rejection_reason, submitted_time, updated_time, is_latest
+                        FROM mr_records 
+                        WHERE sonar_issue_key = ?
+                        ORDER BY submitted_time DESC
+                    """,
+                        (sonar_issue_key,),
+                    )
+
+                    records = []
+                    for row in cursor.fetchall():
+                        records.append(
+                            {
+                                "id": row[0],
+                                "sonar_issue_key": row[1],
+                                "mr_url": row[2],
+                                "mr_iid": row[3],
+                                "mr_title": row[4],
+                                "mr_description": row[5],
+                                "branch_name": row[6],
+                                "source_branch": row[7],
+                                "target_branch": row[8],
+                                "mr_status": row[9],
+                                "rejection_reason": row[10],
+                                "submitted_time": row[11],
+                                "updated_time": row[12],
+                                "is_latest": bool(row[13]),
+                            }
+                        )
+
+                    return records
+
+        except Exception as e:
+            logger.error(f"获取MR记录失败: {e}")
+            return []
+
+    def get_latest_mr_record(self, sonar_issue_key: str) -> Optional[Dict[str, Any]]:
+        """
+        获取问题的最新MR记录
+
+        Args:
+            sonar_issue_key: SonarQube问题Key
+
+        Returns:
+            最新的MR记录，如果不存在返回None
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                               branch_name, source_branch, target_branch, mr_status,
+                               rejection_reason, submitted_time, updated_time, is_latest
+                        FROM mr_records 
+                        WHERE sonar_issue_key = ? AND is_latest = TRUE
+                    """,
+                        (sonar_issue_key,),
+                    )
+
+                    row = cursor.fetchone()
+                    if row:
+                        return {
+                            "id": row[0],
+                            "sonar_issue_key": row[1],
+                            "mr_url": row[2],
+                            "mr_iid": row[3],
+                            "mr_title": row[4],
+                            "mr_description": row[5],
+                            "branch_name": row[6],
+                            "source_branch": row[7],
+                            "target_branch": row[8],
+                            "mr_status": row[9],
+                            "rejection_reason": row[10],
+                            "submitted_time": row[11],
+                            "updated_time": row[12],
+                            "is_latest": bool(row[13]),
+                        }
+                    return None
+
+        except Exception as e:
+            logger.error(f"获取最新MR记录失败: {e}")
+            return None
+
+    def get_rejected_mrs(self) -> List[Dict[str, Any]]:
+        """
+        获取所有被驳回的MR记录
+
+        Returns:
+            被驳回的MR记录列表
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_iid, 
+                               mr.mr_title, mr.mr_description, mr.branch_name,
+                               mr.source_branch, mr.target_branch, mr.mr_status,
+                               mr.rejection_reason, mr.submitted_time, mr.updated_time,
+                               si.jira_task_key, si.sonar_project_key
+                        FROM mr_records mr
+                        LEFT JOIN sonar_issue si ON mr.sonar_issue_key = si.sonar_issue_key
+                        WHERE mr.mr_status = 'rejected'
+                        ORDER BY mr.updated_time DESC
+                    """,
+                    )
+
+                    records = []
+                    for row in cursor.fetchall():
+                        records.append(
+                            {
+                                "id": row[0],
+                                "sonar_issue_key": row[1],
+                                "mr_url": row[2],
+                                "mr_iid": row[3],
+                                "mr_title": row[4],
+                                "mr_description": row[5],
+                                "branch_name": row[6],
+                                "source_branch": row[7],
+                                "target_branch": row[8],
+                                "mr_status": row[9],
+                                "rejection_reason": row[10],
+                                "submitted_time": row[11],
+                                "updated_time": row[12],
+                                "jira_task_key": row[13],
+                                "sonar_project_key": row[14],
+                            }
+                        )
+
+                    return records
+
+        except Exception as e:
+            logger.error(f"获取被驳回MR列表失败: {e}")
+            return []
 
     def get_project_statistics(self) -> Dict[str, Any]:
         """
@@ -301,25 +628,25 @@ class ProjectStatusDB:
 
     def get_task_statistics(self) -> Dict[str, Any]:
         """
-        获取任务统计信息
+        获取SonarQube问题统计信息
 
         Returns:
-            任务统计信息
+            问题统计信息
         """
         try:
             with self.lock:
                 with sqlite3.connect(self.db_path) as conn:
                     cursor = conn.cursor()
 
-                    # 总任务数
-                    cursor.execute("SELECT COUNT(*) FROM created_tasks")
+                    # 总问题数
+                    cursor.execute("SELECT COUNT(*) FROM sonar_issue")
                     total_tasks = cursor.fetchone()[0]
 
                     # 按项目统计
                     cursor.execute(
                         """
                         SELECT sonar_project_key, COUNT(*) as task_count
-                        FROM created_tasks 
+                        FROM sonar_issue 
                         GROUP BY sonar_project_key
                         ORDER BY task_count DESC
                         LIMIT 10
@@ -332,9 +659,73 @@ class ProjectStatusDB:
                             {"project": row[0], "task_count": row[1]}
                         )
 
+                    # 按修复状态统计
+                    cursor.execute(
+                        """
+                        SELECT fix_status, COUNT(*) as count
+                        FROM sonar_issue 
+                        GROUP BY fix_status
+                        ORDER BY count DESC
+                    """
+                    )
+
+                    fix_status_stats = []
+                    for row in cursor.fetchall():
+                        fix_status_stats.append({"status": row[0], "count": row[1]})
+
+                    # 按MR状态统计
+                    cursor.execute(
+                        """
+                        SELECT mr_status, COUNT(*) as count
+                        FROM sonar_issue 
+                        GROUP BY mr_status
+                        ORDER BY count DESC
+                    """
+                    )
+
+                    mr_status_stats = []
+                    for row in cursor.fetchall():
+                        mr_status_stats.append({"status": row[0], "count": row[1]})
+
+                    # MR记录统计
+                    cursor.execute("SELECT COUNT(*) FROM mr_records")
+                    total_mr_records = cursor.fetchone()[0]
+
+                    # 按MR记录状态统计
+                    cursor.execute(
+                        """
+                        SELECT mr_status, COUNT(*) as count
+                        FROM mr_records 
+                        GROUP BY mr_status
+                        ORDER BY count DESC
+                    """
+                    )
+
+                    mr_record_status_stats = []
+                    for row in cursor.fetchall():
+                        mr_record_status_stats.append(
+                            {"status": row[0], "count": row[1]}
+                        )
+
+                    # 被驳回的MR数量
+                    cursor.execute(
+                        """
+                        SELECT COUNT(*) FROM mr_records 
+                        WHERE mr_status = 'rejected'
+                    """
+                    )
+                    rejected_mr_count = cursor.fetchone()[0]
+
                     return {
                         "total_tasks": total_tasks,
                         "tasks_by_project": project_task_stats,
+                        "fix_status_stats": fix_status_stats,
+                        "mr_status_stats": mr_status_stats,
+                        "mr_records": {
+                            "total_mr_records": total_mr_records,
+                            "mr_record_status_stats": mr_record_status_stats,
+                            "rejected_mr_count": rejected_mr_count,
+                        },
                     }
 
         except Exception as e:
@@ -355,16 +746,27 @@ class ProjectStatusDB:
 
                     cutoff_time = datetime.now() - timedelta(days=days)
 
-                    # 清理旧的任务记录
+                    # 清理旧的问题记录
                     cursor.execute(
                         """
-                        DELETE FROM created_tasks 
+                        DELETE FROM sonar_issue 
                         WHERE created_time < ?
                     """,
                         (cutoff_time.isoformat(),),
                     )
 
                     deleted_tasks = cursor.rowcount
+
+                    # 清理旧的MR记录
+                    cursor.execute(
+                        """
+                        DELETE FROM mr_records 
+                        WHERE submitted_time < ?
+                    """,
+                        (cutoff_time.isoformat(),),
+                    )
+
+                    deleted_mr_records = cursor.rowcount
 
                     # 清理旧的项目记录
                     cursor.execute(
@@ -379,9 +781,13 @@ class ProjectStatusDB:
 
                     conn.commit()
 
-                    if deleted_projects > 0 or deleted_tasks > 0:
+                    if (
+                        deleted_projects > 0
+                        or deleted_tasks > 0
+                        or deleted_mr_records > 0
+                    ):
                         logger.info(
-                            f"清理完成: 删除 {deleted_projects} 个项目记录, {deleted_tasks} 个任务记录"
+                            f"清理完成: 删除 {deleted_projects} 个项目记录, {deleted_tasks} 个问题记录, {deleted_mr_records} 个MR记录"
                         )
 
         except Exception as e:
@@ -425,13 +831,13 @@ class ProjectStatusDB:
 
     def get_tasks_by_project(self, sonar_project_key: str) -> List[Dict[str, Any]]:
         """
-        获取指定项目的所有已创建任务
+        获取指定项目的所有SonarQube问题
 
         Args:
             sonar_project_key: SonarQube项目Key
 
         Returns:
-            任务列表
+            问题列表
         """
         try:
             with self.lock:
@@ -440,10 +846,10 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT sonar_issue_key, jira_task_key, created_time
-                        FROM created_tasks 
+                        SELECT sonar_issue_key, jira_task_key, created_time, updated_time
+                        FROM sonar_issue 
                         WHERE sonar_project_key = ?
-                        ORDER BY created_time DESC
+                        ORDER BY updated_time DESC
                     """,
                         (sonar_project_key,),
                     )
@@ -455,13 +861,14 @@ class ProjectStatusDB:
                                 "sonar_issue_key": row[0],
                                 "jira_task_key": row[1],
                                 "created_time": row[2],
+                                "updated_time": row[3],
                             }
                         )
 
                     return tasks
 
         except Exception as e:
-            logger.error(f"获取项目任务列表失败: {e}")
+            logger.error(f"获取项目问题列表失败: {e}")
             return []
 
     def export_stats(self) -> Dict[str, Any]:
