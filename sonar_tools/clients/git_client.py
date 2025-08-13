@@ -7,7 +7,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -20,6 +19,14 @@ try:
 except ImportError:
     GITLAB_AVAILABLE = False
     logging.warning("GitLab库未安装，某些功能将不可用")
+
+try:
+    import git
+    from git import Repo
+    GITPYTHON_AVAILABLE = True
+except ImportError:
+    GITPYTHON_AVAILABLE = False
+    logging.warning("GitPython库未安装，某些功能将不可用")
 
 from ..core.config import Config
 
@@ -173,7 +180,11 @@ class GitClient:
     def _git_clone(
         self, clone_url: str, local_path: Path, default_branch: str
     ) -> Tuple[bool, Optional[Path]]:
-        """执行git clone"""
+        """执行git clone - 使用GitPython库"""
+        if not GITPYTHON_AVAILABLE:
+            logger.error("GitPython库不可用，无法执行git clone")
+            return False, None
+            
         try:
             # 确保父目录存在
             local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,28 +197,21 @@ class GitClient:
                     logger.info(f"目录已存在且是git仓库: {local_path}")
                     return True, local_path
 
-            # 执行git clone
-            cmd = [
-                "git",
-                "clone",
-                "--branch",
-                default_branch,
-                clone_url,
-                str(local_path),
-            ]
-            logger.info(f"执行: git clone --branch {default_branch} [URL] {local_path}")
+            # 使用GitPython执行clone
+            logger.info(f"执行GitPython clone --branch {default_branch} [URL] {local_path}")
+            
+            repo = Repo.clone_from(
+                url=clone_url,
+                to_path=str(local_path),
+                branch=default_branch,
+                depth=1  # 浅克隆，只获取最新提交，提高性能
+            )
+            
+            logger.info(f"仓库克隆成功: {local_path}")
+            return True, local_path
 
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-            if result.returncode == 0:
-                logger.info(f"仓库克隆成功: {local_path}")
-                return True, local_path
-            else:
-                logger.error(f"Git clone失败: {result.stderr}")
-                return False, None
-
-        except subprocess.TimeoutExpired:
-            logger.error("Git clone超时")
+        except git.exc.GitCommandError as e:
+            logger.error(f"GitPython clone失败: {e}")
             return False, None
         except Exception as e:
             logger.error(f"Git clone异常: {e}")
@@ -216,60 +220,91 @@ class GitClient:
     def _git_pull(
         self, repo_path: Path, default_branch: str
     ) -> Tuple[bool, Optional[Path]]:
-        """执行git pull"""
+        """执行git pull - 使用GitPython库"""
+        if not GITPYTHON_AVAILABLE:
+            logger.error("GitPython库不可用，无法执行git pull")
+            return False, None
+            
         try:
-            # 切换到仓库目录
-            original_cwd = os.getcwd()
-            os.chdir(repo_path)
-
-            try:
-                # 首先检查当前分支
-                result = subprocess.run(
-                    ["git", "branch", "--show-current"],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-                current_branch = result.stdout.strip()
-                logger.info(f"当前分支: {current_branch}")
-
-                # 如果不在默认分支，先切换
-                if current_branch != default_branch:
-                    logger.info(f"切换到默认分支: {default_branch}")
-                    result = subprocess.run(
-                        ["git", "checkout", default_branch],
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    if result.returncode != 0:
-                        logger.warning(
-                            f"切换分支失败，继续在当前分支: {current_branch}"
-                        )
-
-                # 执行git pull
-                logger.info(f"执行git pull: {repo_path}")
-                result = subprocess.run(
-                    ["git", "pull"], capture_output=True, text=True, timeout=120
-                )
-
-                if result.returncode == 0:
-                    output = result.stdout.strip()
-                    if "Already up to date" in output:
-                        logger.info("代码已是最新")
+            # 使用GitPython打开仓库
+            repo = Repo(repo_path)
+            
+            if repo.bare:
+                logger.error(f"仓库是bare仓库: {repo_path}")
+                return False, None
+                
+            # 检查当前分支
+            current_branch = repo.active_branch.name
+            logger.info(f"当前分支: {current_branch}")
+            
+            # 如果不在默认分支，先切换
+            if current_branch != default_branch:
+                logger.info(f"切换到默认分支: {default_branch}")
+                try:
+                    # 检查分支是否存在
+                    if default_branch in repo.heads:
+                        repo.heads[default_branch].checkout()
                     else:
-                        logger.info(f"Git pull成功: {output}")
+                        # 创建并跟踪远程分支
+                        if f"origin/{default_branch}" in repo.refs:
+                            repo.create_head(default_branch, repo.refs[f"origin/{default_branch}"])
+                            repo.heads[default_branch].set_tracking_branch(repo.refs[f"origin/{default_branch}"])
+                            repo.heads[default_branch].checkout()
+                        else:
+                            logger.error(f"远程分支 origin/{default_branch} 不存在")
+                            return False, None
+                            
+                except Exception as e:
+                    logger.warning(f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}")
+            
+            # 执行git pull
+            logger.info(f"执行git pull: {repo_path}")
+            
+            # 获取远程仓库引用
+            if not repo.remotes:
+                logger.error("没有配置远程仓库")
+                return False, None
+                
+            origin = repo.remotes.origin
+            
+            # 首先fetch最新的远程内容
+            logger.info("执行fetch操作...")
+            fetch_info = origin.fetch()
+            logger.debug(f"Fetch结果: {[str(info) for info in fetch_info]}")
+            
+            # 执行pull（实际上是merge）
+            active_branch = repo.active_branch
+            tracking_branch = active_branch.tracking_branch()
+            
+            if tracking_branch:
+                # 检查是否需要更新
+                commits_behind = list(repo.iter_commits(f'{active_branch}..{tracking_branch}'))
+                commits_ahead = list(repo.iter_commits(f'{tracking_branch}..{active_branch}'))
+                
+                if not commits_behind and not commits_ahead:
+                    logger.info("代码已是最新")
                     return True, repo_path
-                else:
-                    logger.error(f"Git pull失败: {result.stderr}")
-                    return False, None
-
-            finally:
-                # 恢复原始工作目录
-                os.chdir(original_cwd)
-
-        except subprocess.TimeoutExpired:
-            logger.error("Git pull超时")
+                elif commits_ahead and not commits_behind:
+                    logger.info("本地分支领先于远程分支")
+                    return True, repo_path
+                elif commits_behind:
+                    # 执行merge
+                    try:
+                        repo.git.merge(tracking_branch)
+                        logger.info(f"Git pull成功，合并了 {len(commits_behind)} 个提交")
+                        return True, repo_path
+                    except git.exc.GitCommandError as e:
+                        logger.error(f"Git merge失败: {e}")
+                        return False, None
+            else:
+                logger.warning("当前分支没有设置跟踪分支")
+                return False, None
+                
+        except git.exc.InvalidGitRepositoryError:
+            logger.error(f"无效的Git仓库: {repo_path}")
+            return False, None
+        except git.exc.GitCommandError as e:
+            logger.error(f"Git命令执行失败: {e}")
             return False, None
         except Exception as e:
             logger.error(f"Git pull异常: {e}")
@@ -298,7 +333,7 @@ class GitClient:
 
 
 class GitManager:
-    """Git操作管理器 - 兼容性保持"""
+    """Git操作管理器 - 使用GitPython库"""
 
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
@@ -306,94 +341,110 @@ class GitManager:
 
     def create_branch(self, branch_name: str) -> bool:
         """创建并切换到新分支"""
+        if not GITPYTHON_AVAILABLE:
+            logger.error("GitPython库不可用，无法创建分支")
+            return False
+            
         try:
-            original_cwd = os.getcwd()
-            os.chdir(self.repo_path)
-
-            try:
-                # 创建并切换分支
-                result = subprocess.run(
-                    ["git", "checkout", "-b", branch_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-
-                if result.returncode == 0:
-                    logger.info(f"分支创建成功: {branch_name}")
-                    return True
-                else:
-                    logger.error(f"创建分支失败: {result.stderr}")
-                    return False
-            finally:
-                os.chdir(original_cwd)
-
+            repo = Repo(self.repo_path)
+            
+            # 检查分支是否已存在
+            if branch_name in repo.heads:
+                logger.info(f"分支已存在，切换到: {branch_name}")
+                repo.heads[branch_name].checkout()
+                return True
+            
+            # 创建并切换到新分支
+            new_branch = repo.create_head(branch_name)
+            new_branch.checkout()
+            
+            logger.info(f"分支创建成功: {branch_name}")
+            return True
+            
+        except git.exc.GitCommandError as e:
+            logger.error(f"GitPython创建分支失败: {e}")
+            return False
         except Exception as e:
-            logger.error(f"创建分支失败: {e}")
+            logger.error(f"创建分支异常: {e}")
             return False
 
     def commit_changes(self, files: list, message: str) -> bool:
         """提交更改"""
+        if not GITPYTHON_AVAILABLE:
+            logger.error("GitPython库不可用，无法提交更改")
+            return False
+            
         try:
-            original_cwd = os.getcwd()
-            os.chdir(self.repo_path)
-
-            try:
-                # 添加文件
-                for file in files:
-                    result = subprocess.run(
-                        ["git", "add", file], capture_output=True, text=True, timeout=30
-                    )
-                    if result.returncode != 0:
-                        logger.error(f"添加文件失败 {file}: {result.stderr}")
-                        return False
-
-                # 提交
-                result = subprocess.run(
-                    ["git", "commit", "-m", message],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-
-                if result.returncode == 0:
-                    logger.info(f"提交成功: {message}")
-                    return True
-                else:
-                    logger.error(f"提交失败: {result.stderr}")
+            repo = Repo(self.repo_path)
+            
+            # 添加文件到暂存区
+            for file in files:
+                try:
+                    repo.index.add([file])
+                    logger.debug(f"添加文件到暂存区: {file}")
+                except Exception as e:
+                    logger.error(f"添加文件失败 {file}: {e}")
                     return False
-            finally:
-                os.chdir(original_cwd)
-
+            
+            # 检查是否有更改需要提交
+            if not repo.index.diff("HEAD"):
+                logger.warning("没有更改需要提交")
+                return True
+            
+            # 提交更改
+            commit = repo.index.commit(message)
+            logger.info(f"提交成功: {message} (commit: {commit.hexsha[:8]})")
+            return True
+            
+        except git.exc.GitCommandError as e:
+            logger.error(f"GitPython提交失败: {e}")
+            return False
         except Exception as e:
-            logger.error(f"提交更改失败: {e}")
+            logger.error(f"提交更改异常: {e}")
             return False
 
     def push_branch(self, branch_name: str) -> bool:
         """推送分支到远程"""
+        if not GITPYTHON_AVAILABLE:
+            logger.error("GitPython库不可用，无法推送分支")
+            return False
+            
         try:
-            original_cwd = os.getcwd()
-            os.chdir(self.repo_path)
-
-            try:
-                result = subprocess.run(
-                    ["git", "push", "-u", "origin", branch_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-
-                if result.returncode == 0:
-                    logger.info(f"分支推送成功: {branch_name}")
-                    return True
-                else:
-                    logger.error(f"推送分支失败: {result.stderr}")
+            repo = Repo(self.repo_path)
+            
+            if not repo.remotes:
+                logger.error("没有配置远程仓库")
+                return False
+                
+            origin = repo.remotes.origin
+            
+            # 推送分支到远程，并设置跟踪
+            push_info = origin.push(f"refs/heads/{branch_name}:refs/heads/{branch_name}")
+            
+            # 检查推送结果
+            for info in push_info:
+                if info.flags & info.ERROR:
+                    logger.error(f"推送分支失败: {info.summary}")
                     return False
-            finally:
-                os.chdir(original_cwd)
-
+                elif info.flags & info.UP_TO_DATE:
+                    logger.info(f"分支已是最新: {branch_name}")
+                elif info.flags & (info.NEW_TAG | info.NEW_HEAD | info.FAST_FORWARD):
+                    logger.info(f"分支推送成功: {branch_name}")
+            
+            # 设置本地分支跟踪远程分支
+            if branch_name in repo.heads:
+                local_branch = repo.heads[branch_name]
+                remote_ref = f"origin/{branch_name}"
+                if remote_ref in repo.refs:
+                    local_branch.set_tracking_branch(repo.refs[remote_ref])
+            
+            return True
+            
+        except git.exc.GitCommandError as e:
+            logger.error(f"GitPython推送分支失败: {e}")
+            return False
         except Exception as e:
-            logger.error(f"推送分支失败: {e}")
+            logger.error(f"推送分支异常: {e}")
             return False
 
 
