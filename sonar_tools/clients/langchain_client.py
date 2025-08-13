@@ -286,16 +286,22 @@ class LangChainClient:
             # 尝试解析JSON响应
             try:
                 result = json.loads(response)
-                
+
                 # 验证新的代码结构
                 if "fixed_code" in result and isinstance(result["fixed_code"], dict):
-                    logger.info(f"成功生成拆分格式修复方案: {issue_data.get('key', 'Unknown')}")
+                    logger.info(
+                        f"成功生成拆分格式修复方案: {issue_data.get('key', 'Unknown')}"
+                    )
                     fixed_code_info = result["fixed_code"]
-                    logger.debug(f"导入代码: {len(fixed_code_info.get('imports', ''))} 字符")
-                    logger.debug(f"函数代码: {len(fixed_code_info.get('function_code', ''))} 字符")
+                    logger.debug(
+                        f"导入代码: {len(fixed_code_info.get('imports', ''))} 字符"
+                    )
+                    logger.debug(
+                        f"函数代码: {len(fixed_code_info.get('function_code', ''))} 字符"
+                    )
                 else:
                     logger.info(f"成功生成修复方案: {issue_data.get('key', 'Unknown')}")
-                
+
                 return result
             except json.JSONDecodeError:
                 logger.warning("AI修复响应不是有效JSON，返回文本响应")
@@ -305,11 +311,7 @@ class LangChainClient:
                         "changes": "AI响应格式错误",
                         "impact": "未知",
                     },
-                    "fixed_code": {
-                        "imports": "",
-                        "function_code": "",
-                        "full_code": ""
-                    },
+                    "fixed_code": {"imports": "", "function_code": "", "full_code": ""},
                     "raw_response": response,
                 }
 
@@ -321,11 +323,7 @@ class LangChainClient:
                     "changes": str(e),
                     "impact": "未知",
                 },
-                "fixed_code": {
-                    "imports": "",
-                    "function_code": "",
-                    "full_code": ""
-                },
+                "fixed_code": {"imports": "", "function_code": "", "full_code": ""},
                 "error": str(e),
             }
 
