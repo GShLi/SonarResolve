@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..clients.git_client import AutoFixProcessor, GitClient, GitLabClient
+from ..clients.git_client import GitClient, GitLabClient
 from ..clients.sonarqube_client import SonarQubeClient
 from ..core.config import Config
 from ..core.models import SonarIssue
