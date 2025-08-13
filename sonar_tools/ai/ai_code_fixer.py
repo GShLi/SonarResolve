@@ -124,12 +124,11 @@ class AICodeFixer:
                 if self._fix_single_issue(issue, repo_path):
                     relative_path = issue.component.split(":")[-1]  # 获取相对路径
                     modified_files.append(relative_path)
-                    # 提交更改
-                    commit_info = self._generate_commit_info(issues)
-                    if not self.git_client.commit_changes(
-                        repo_path, modified_files, commit_info["commit_message"]
+                    # 立即提交当前问题的修复
+                    if not self._commit_single_issue_fix(
+                        repo_path, issue, relative_path
                     ):
-                        logger.error("提交更改失败")
+                        logger.error(f"提交问题 {issue.key} 的修复失败")
                         return False
 
             if not modified_files:
@@ -142,6 +141,7 @@ class AICodeFixer:
                 return False
 
             # 创建Merge Request
+            commit_info = self._generate_commit_info(issues)
             mr_result = self.gitlab_client.create_merge_request(
                 project_id=repo_info["id"],
                 source_branch=branch_name,
@@ -254,6 +254,30 @@ class AICodeFixer:
             "mr_title": f"fix(sonar): 修复 {issue_count} 个Critical问题",
             "mr_description": mr_description,
         }
+
+    def _commit_single_issue_fix(
+        self, repo_path: Path, issue: SonarIssue, modified_file: str
+    ) -> bool:
+        """提交单个问题的修复"""
+        try:
+            commit_message = f"fix(sonar): 修复 {issue.rule} 问题\n\n"
+            commit_message += f"- 文件: {issue.component}\n"
+            commit_message += f"- 行数: {issue.line}\n"
+            commit_message += f"- 问题: {issue.message}\n"
+            commit_message += f"- Issue Key: {issue.key}"
+
+            if not self.git_client.commit_changes(
+                repo_path, [modified_file], commit_message
+            ):
+                logger.error(f"提交问题 {issue.key} 的修复失败")
+                return False
+
+            logger.info(f"成功提交问题 {issue.key} 的修复")
+            return True
+
+        except Exception as e:
+            logger.error(f"提交单个问题修复失败 {issue.key}: {e}")
+            return False
 
     def test_connection(self) -> bool:
         """测试所有连接"""
