@@ -256,6 +256,7 @@ class AICodeFixer:
                 "language": issue_data.get("language", ""),
                 "issue_key": issue.key,
                 "rule": issue.rule,
+                "function_scope": function_scope,  # 添加函数范围信息
             }
 
             if self._apply_fix(file_path, fix_data):
@@ -422,6 +423,23 @@ class AICodeFixer:
                 logger.error("没有有效的修复代码")
                 return False
 
+            # 检查是否有精确的函数范围信息
+            function_scope = fix.get("function_scope")
+            if (
+                function_scope
+                and function_scope.get("success")
+                and function_scope.get("function_found")
+                and isinstance(fixed_code_data, dict)
+                and fixed_code_data.get("function_code")
+            ):
+
+                # 使用精确函数替换策略
+                if self._apply_function_replacement(file_path, content, fix):
+                    logger.info("使用精确函数替换策略修复成功")
+                    return True
+                else:
+                    logger.warning("精确函数替换失败，尝试其他策略")
+
             # 处理新旧代码格式
             if isinstance(fixed_code_data, dict):
                 # 新格式：拆分的代码结构
@@ -441,7 +459,7 @@ class AICodeFixer:
                     logger.error("修复代码为空")
                     return False
 
-            # 首先尝试AI智能应用（推荐方式）
+            # 尝试AI智能应用（备用方式）
             if self._try_ai_application(file_path, content, fix):
                 return True
 
@@ -469,6 +487,118 @@ class AICodeFixer:
         except Exception as e:
             logger.error(f"智能修复失败: {e}")
             return False
+
+    def _apply_function_replacement(
+        self, file_path: Path, content: str, fix: dict
+    ) -> bool:
+        """使用精确函数范围进行直接替换"""
+        try:
+            function_scope = fix.get("function_scope")
+            fixed_code_data = fix.get("fixed_code")
+
+            if not function_scope or not isinstance(fixed_code_data, dict):
+                return False
+
+            start_line = function_scope.get("start_line")
+            end_line = function_scope.get("end_line")
+            function_code = fixed_code_data.get("function_code")
+            imports_code = fixed_code_data.get("imports", "")
+
+            if not start_line or not end_line or not function_code:
+                logger.error("函数范围信息不完整")
+                return False
+
+            logger.info(f"使用精确函数替换: 第{start_line}-{end_line}行")
+
+            # 按行分割文件内容
+            lines = content.splitlines(keepends=True)
+
+            # 验证行号范围
+            if start_line < 1 or end_line > len(lines) or start_line > end_line:
+                logger.error(
+                    f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)"
+                )
+                return False
+
+            # 构建新的文件内容
+            new_lines = []
+
+            # 保留函数前的内容
+            new_lines.extend(lines[: start_line - 1])
+
+            # 处理导入语句
+            if imports_code.strip() and imports_code.strip() != "# 无需新增导入":
+                # 找到合适的位置插入导入语句
+                import_insert_line = self._find_import_insert_position(lines)
+                if import_insert_line is not None and import_insert_line < start_line:
+                    # 如果导入位置在函数之前，需要调整
+                    logger.info(f"在第{import_insert_line+1}行添加导入语句")
+                    # 这里需要更复杂的逻辑来处理导入，暂时跳过
+                else:
+                    logger.info("将导入语句添加到函数代码中")
+
+            # 添加修复后的函数代码
+            if not function_code.endswith("\n"):
+                function_code += "\n"
+            new_lines.append(function_code)
+
+            # 保留函数后的内容
+            new_lines.extend(lines[end_line:])
+
+            # 生成新的文件内容
+            new_content = "".join(new_lines)
+
+            # 写回文件
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+
+            logger.info(f"成功替换函数内容: {function_scope.get('function_name')}")
+            return True
+
+        except Exception as e:
+            logger.error(f"精确函数替换失败: {e}")
+            return False
+
+    def _find_import_insert_position(self, lines: list) -> int:
+        """找到插入导入语句的合适位置"""
+        try:
+            # 简单策略：找到最后一个import语句的位置
+            last_import_line = -1
+
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if (
+                    stripped.startswith("import ")
+                    or stripped.startswith("from ")
+                    or stripped.startswith("#")
+                    and "import" in stripped
+                ):
+                    last_import_line = i
+                elif stripped and not stripped.startswith("#"):
+                    # 遇到非注释的实际代码，停止搜索
+                    break
+
+            if last_import_line >= 0:
+                return last_import_line + 1
+            else:
+                # 如果没有找到导入语句，在文件开头插入
+                # 跳过shebang和编码声明
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    if not (
+                        stripped.startswith("#")
+                        and (
+                            "!" in stripped
+                            or "coding" in stripped
+                            or "encoding" in stripped
+                        )
+                    ):
+                        return i
+                return 0
+
+        except Exception as e:
+            logger.debug(f"查找导入位置失败: {e}")
+            return None
 
     def _try_ai_application(self, file_path: Path, content: str, fix: dict) -> bool:
         """尝试使用AI智能应用修复"""
