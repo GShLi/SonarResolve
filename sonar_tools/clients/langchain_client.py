@@ -289,13 +289,9 @@ class LangChainClient:
 
                 # 验证新的代码结构
                 if "fixed_code" in result and isinstance(result["fixed_code"], dict):
-                    logger.info(
-                        f"成功生成拆分格式修复方案: {issue_data.get('key', 'Unknown')}"
-                    )
+                    logger.info(f"成功生成拆分格式修复方案: {issue_data.get('key', 'Unknown')}")
                     fixed_code_info = result["fixed_code"]
-                    logger.debug(
-                        f"导入代码: {len(fixed_code_info.get('imports', ''))} 字符"
-                    )
+                    logger.debug(f"导入代码: {len(fixed_code_info.get('imports', ''))} 字符")
                     logger.debug(
                         f"函数代码: {len(fixed_code_info.get('function_code', ''))} 字符"
                     )
@@ -512,9 +508,7 @@ class LangChainClient:
     def test_connection(self) -> bool:
         """测试AI连接"""
         try:
-            response = self.chat(
-                "你是一个代码助手。", "请回复'连接成功'来确认连接正常。"
-            )
+            response = self.chat("你是一个代码助手。", "请回复'连接成功'来确认连接正常。")
 
             if "连接成功" in response or "成功" in response:
                 logger.info("AI连接测试成功")

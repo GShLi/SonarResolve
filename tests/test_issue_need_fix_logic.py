@@ -3,17 +3,17 @@
 测试修改后的is_issue_need_fix方法逻辑
 """
 
-import sys
 import os
+import sys
 import tempfile
 from pathlib import Path
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent))
 
+from sonar_tools.core.models import SonarIssue
 from sonar_tools.service.sonar_service import SonarService
 from sonar_tools.utils.project_db import ProjectStatusDB
-from sonar_tools.core.models import SonarIssue
 
 
 def test_issue_need_fix_logic():

@@ -33,9 +33,7 @@ def test_basic_logic():
         print(f"   需要修复: {'✅ 是' if result['need_fix'] else '❌ 否'}")
         print(f"   原因: {result['reason']}")
         assert result["need_fix"] == True, "应该需要修复"
-        assert (
-            "未找到 issue 记录" in result["reason"]
-        ), "原因应该包含'未找到 issue 记录'"
+        assert "未找到 issue 记录" in result["reason"], "原因应该包含'未找到 issue 记录'"
 
         # 手动创建基本记录来模拟情况2和3
         print("\n2️⃣ 测试手动添加记录后的逻辑...")

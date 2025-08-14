@@ -63,9 +63,7 @@ class TaskScheduler:
             # 计算下次执行时间
             next_run = self._get_next_run_time()
             if next_run:
-                logger.info(
-                    f"  - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
+                logger.info(f"  - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def _validate_cron_expression(self) -> bool:
         """验证cron表达式格式"""
@@ -118,9 +116,7 @@ class TaskScheduler:
 
             # 记录任务统计信息
             if "total_jira_tasks_created" in task_results:
-                logger.info(
-                    f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个"
-                )
+                logger.info(f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个")
 
         except Exception as e:
             result["error"] = str(e)

@@ -9,10 +9,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..clients.git_client import GitClient, GitLabClient
+from ..clients.langchain_client import LangChainClient
 from ..clients.sonarqube_client import SonarQubeClient
 from ..core.config import Config
 from ..core.models import SonarIssue
-from ..clients.langchain_client import LangChainClient
 from ..service.sonar_service import SonarService
 
 logger = logging.getLogger(__name__)
@@ -107,9 +107,11 @@ class AICodeFixer:
             logger.info(f"开始处理项目 {project_name} 的问题，共 {len(issues)} 个")
 
             # 准备Git仓库
-            success, repo_path, repo_info = (
-                self.git_client.prepare_repository_for_project(project_name)
-            )
+            (
+                success,
+                repo_path,
+                repo_info,
+            ) = self.git_client.prepare_repository_for_project(project_name)
             if not success or not repo_path or not repo_info:
                 logger.error(f"准备Git仓库失败: {project_name}")
                 return False
@@ -235,9 +237,7 @@ class AICodeFixer:
                     )
 
                     if mr_record_success:
-                        logger.info(
-                            f"成功创建MR记录: {issue.key} -> {mr_result['url']}"
-                        )
+                        logger.info(f"成功创建MR记录: {issue.key} -> {mr_result['url']}")
                     else:
                         logger.warning(f"MR记录创建失败，但MR已成功创建: {issue.key}")
 
@@ -641,7 +641,6 @@ class AICodeFixer:
                 and isinstance(fixed_code_data, dict)
                 and fixed_code_data.get("function_code")
             ):
-
                 # 使用精确函数替换策略
                 if self._apply_function_replacement(file_path, content, fix):
                     logger.info("使用精确函数替换策略修复成功")
@@ -724,9 +723,7 @@ class AICodeFixer:
 
             # 验证行号范围
             if start_line < 1 or end_line > len(lines) or start_line > end_line:
-                logger.error(
-                    f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)"
-                )
+                logger.error(f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)")
                 return False
 
             # 构建新的文件内容
@@ -854,9 +851,7 @@ class AICodeFixer:
 
                     return True
                 else:
-                    logger.warning(
-                        f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法"
-                    )
+                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
                     return False
             else:
                 logger.debug(

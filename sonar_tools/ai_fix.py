@@ -31,33 +31,16 @@ def main():
   python ai_fix.py --project MY_PROJECT           # 修复指定项目
   python ai_fix.py --test                         # 连接测试
   python ai_fix.py --dry-run                      # 试运行（分析但不修复）
-        """
+        """,
     )
-    
-    parser.add_argument(
-        "--project",
-        type=str,
-        help="指定项目Key（可选，不指定则处理所有项目）"
-    )
-    
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="仅测试连接，不执行实际操作"
-    )
-    
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="试运行模式，分析问题但不实际修复"
-    )
-    
-    parser.add_argument(
-        "--max-issues",
-        type=int,
-        default=10,
-        help="单次处理的最大问题数量（默认10个）"
-    )
+
+    parser.add_argument("--project", type=str, help="指定项目Key（可选，不指定则处理所有项目）")
+
+    parser.add_argument("--test", action="store_true", help="仅测试连接，不执行实际操作")
+
+    parser.add_argument("--dry-run", action="store_true", help="试运行模式，分析问题但不实际修复")
+
+    parser.add_argument("--max-issues", type=int, default=10, help="单次处理的最大问题数量（默认10个）")
 
     args = parser.parse_args()
 
@@ -72,7 +55,7 @@ def main():
 
         # 初始化AI修复器
         fixer = AICodeFixer()
-        
+
         if args.test:
             # 连接测试
             logger.info("🔍 开始连接测试...")
@@ -82,7 +65,7 @@ def main():
             else:
                 logger.error("❌ 连接测试失败")
                 return 1
-        
+
         if args.dry_run:
             logger.info("🧪 试运行模式：分析问题...")
             # TODO: 实现试运行逻辑
@@ -92,9 +75,9 @@ def main():
                 if not issues:
                     logger.info("✅ 没有发现Critical问题")
                     return 0
-                
+
                 logger.info(f"📊 发现 {len(issues)} 个Critical问题")
-                
+
                 # 按项目分组显示
                 issues_by_project = fixer._group_issues_by_project(issues)
                 for project_name, project_issues in issues_by_project.items():
@@ -103,18 +86,18 @@ def main():
                         logger.info(f"    🐛 {issue.rule}: {issue.message}")
                     if len(project_issues) > 3:
                         logger.info(f"    ⋮ 还有 {len(project_issues) - 3} 个问题...")
-                
+
                 logger.info("✅ 试运行完成，使用 --dry-run 移除此参数来执行实际修复")
                 return 0
-                
+
             except Exception as e:
                 logger.error(f"❌ 试运行失败: {e}")
                 return 1
-        
+
         # 执行实际修复
         logger.info("🚀 开始AI自动修复...")
         success = fixer.process_critical_issues(args.project)
-        
+
         if success:
             logger.info("🎉 AI自动修复完成")
             return 0

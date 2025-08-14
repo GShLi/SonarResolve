@@ -1,10 +1,11 @@
 """
 Tests for SonarQube client functionality
 """
-import pytest
 from unittest.mock import Mock, patch
-from sonarqube_client import SonarQubeClient
+
+import pytest
 from models import SonarIssue
+from sonarqube_client import SonarQubeClient
 
 
 class TestSonarQubeClient:
@@ -14,7 +15,7 @@ class TestSonarQubeClient:
         """Setup test environment"""
         self.client = SonarQubeClient("https://test.sonar.com", "test-token")
 
-    @patch('sonarqube_client.requests.Session.get')
+    @patch("sonarqube_client.requests.Session.get")
     def test_connection_success(self, mock_get):
         """Test successful connection to SonarQube"""
         mock_response = Mock()
@@ -25,7 +26,7 @@ class TestSonarQubeClient:
         result = self.client.test_connection()
         assert result is True
 
-    @patch('sonarqube_client.requests.Session.get')
+    @patch("sonarqube_client.requests.Session.get")
     def test_connection_failure(self, mock_get):
         """Test failed connection to SonarQube"""
         mock_get.side_effect = Exception("Connection failed")
@@ -33,7 +34,7 @@ class TestSonarQubeClient:
         result = self.client.test_connection()
         assert result is False
 
-    @patch('sonarqube_client.requests.Session.get')
+    @patch("sonarqube_client.requests.Session.get")
     def test_get_critical_issues(self, mock_get):
         """Test getting critical issues"""
         mock_response = Mock()
@@ -53,14 +54,14 @@ class TestSonarQubeClient:
                     "updateDate": "2024-01-01T00:00:00Z",
                     "status": "OPEN",
                     "type": "BUG",
-                    "tags": ["security"]
+                    "tags": ["security"],
                 }
-            ]
+            ],
         }
         mock_get.return_value = mock_response
 
         issues = self.client.get_critical_issues("test-project")
-        
+
         assert len(issues) == 1
         assert isinstance(issues[0], SonarIssue)
         assert issues[0].key == "TEST-123"

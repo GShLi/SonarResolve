@@ -5,8 +5,8 @@ SonarQube业务服务
 """
 
 import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from ..core.models import SonarIssue
 from ..utils.project_db import ProjectStatusDB
@@ -211,9 +211,7 @@ class SonarService:
                 "current_status": issue_status or {"has_task": True},
                 "latest_mr": latest_mr,
                 "action_required": (
-                    "无需操作"
-                    if mr_status in ["merged", "closed"]
-                    else "等待MR处理结果"
+                    "无需操作" if mr_status in ["merged", "closed"] else "等待MR处理结果"
                 ),
             }
 
@@ -395,7 +393,6 @@ class SonarService:
                         and latest_mr.get("mr_status") == "rejected"
                         and latest_mr.get("mr_url") == mr.get("mr_url")
                     ):
-
                         issue_info = {
                             "sonar_issue_key": sonar_issue_key,
                             "sonar_project_key": mr.get("sonar_project_key"),

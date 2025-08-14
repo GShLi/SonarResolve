@@ -2,7 +2,7 @@
 Tests for data models
 """
 import pytest
-from models import SonarIssue, JiraTask
+from models import JiraTask, SonarIssue
 
 
 class TestSonarIssue:
@@ -22,7 +22,7 @@ class TestSonarIssue:
             "updateDate": "2024-01-01T00:00:00Z",
             "status": "OPEN",
             "type": "BUG",
-            "tags": ["security", "performance"]
+            "tags": ["security", "performance"],
         }
 
         issue = SonarIssue.from_sonar_response(response_data)
@@ -49,7 +49,7 @@ class TestSonarIssue:
             type="BUG",
             debt=None,
             effort=None,
-            tags=[]
+            tags=[],
         )
 
         file_path = issue.get_file_path()
@@ -71,7 +71,7 @@ class TestSonarIssue:
             type="BUG",
             debt=None,
             effort=None,
-            tags=[]
+            tags=[],
         )
 
         location = issue.get_location_info()
@@ -97,7 +97,7 @@ class TestJiraTask:
             type="VULNERABILITY",
             debt="30min",
             effort="1h",
-            tags=["security"]
+            tags=["security"],
         )
 
         jira_task = JiraTask.from_sonar_issue(sonar_issue, "PROJ")
