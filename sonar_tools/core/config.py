@@ -33,9 +33,6 @@ class Config:
     GITLAB_URL = os.getenv("GITLAB_URL")
     GITLAB_TOKEN = os.getenv("GITLAB_TOKEN")
 
-    # Git仓库配置
-    GIT_REPOSITORY_PATH = os.getenv("GIT_REPOSITORY_PATH", ".")
-
     # 本地工作目录配置
     LOCAL_WORKSPACE = os.getenv("LOCAL_WORKSPACE", "./workspace")
 
@@ -43,26 +40,9 @@ class Config:
     AI_PROVIDER = os.getenv("AI_PROVIDER", "openai")  # openai, anthropic, azure
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")  # LiteLLM代理地址
-    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     AI_MODEL = os.getenv("AI_MODEL", "gpt-4")
     AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.1"))
     AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "4000"))
-
-    # AI自动修复配置
-    AI_AUTO_FIX_ENABLED = os.getenv("AI_AUTO_FIX_ENABLED", "false").lower() == "true"
-    AI_CODE_CONTEXT_LINES = int(os.getenv("AI_CODE_CONTEXT_LINES", "10"))
-    AI_MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", "3"))
-
-    # AI代码应用配置
-    AI_APPLY_FIXES = (
-        os.getenv("AI_APPLY_FIXES", "true").lower() == "true"
-    )  # 是否使用AI智能应用修复
-    AI_APPLY_CONFIDENCE_THRESHOLD = int(
-        os.getenv("AI_APPLY_CONFIDENCE_THRESHOLD", "7")
-    )  # AI应用信心阈值(1-10)
-    AI_FALLBACK_TO_TRADITIONAL = (
-        os.getenv("AI_FALLBACK_TO_TRADITIONAL", "true").lower() == "true"
-    )  # AI失败时是否回退传统方法
 
     # 日志配置
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -133,9 +113,6 @@ class Config:
         """验证AI配置"""
         if cls.AI_PROVIDER == "openai" and not cls.OPENAI_API_KEY:
             raise ValueError("使用OpenAI时需要配置OPENAI_API_KEY")
-
-        if cls.AI_PROVIDER == "anthropic" and not cls.ANTHROPIC_API_KEY:
-            raise ValueError("使用Anthropic时需要配置ANTHROPIC_API_KEY")
 
         return True
 
