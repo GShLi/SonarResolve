@@ -225,16 +225,16 @@ class PromptTemplates:
 """
 
         # 添加函数范围信息
-        function_scope = issue_data.get("function_scope")
-        if function_scope and function_scope.get("success"):
+        scope = issue_data.get("function_scope")
+        if scope and scope.get("success"):
             prompt += f"""
 ## 函数范围信息
-**函数名称**: {function_scope.get('function_name', 'Unknown')}
-**函数签名**: {function_scope.get('function_signature', 'Unknown')}
-**函数范围**: 第{function_scope.get('start_line', 'Unknown')}-{function_scope.get('end_line', 'Unknown')}行
-**范围类型**: {function_scope.get('scope_type', 'Unknown')}
+**函数名称**: {scope.get('function_name', 'Unknown')}
+**函数签名**: {scope.get('function_signature', 'Unknown')}
+**函数范围**: 第{scope.get('start_line', 'Unknown')}-{scope.get('end_line', 'Unknown')}行
+**范围类型**: {scope.get('scope_type', 'Unknown')}
 
-**范围分析说明**: {function_scope.get('analysis_notes', '无说明')}
+**范围分析说明**: {scope.get('analysis_notes', '无说明')}
 
 重要提示：
 1. 该问题位于函数内部，修复时请确保不破坏函数的整体结构
@@ -352,14 +352,14 @@ class PromptTemplates:
 """
 
         # 添加函数范围信息
-        function_scope = issue_data.get("function_scope")
-        if function_scope and function_scope.get("success"):
+        scope = issue_data.get("function_scope")
+        if scope and scope.get("success"):
             prompt += f"""
 ## 函数范围上下文
-- **函数名称**: {function_scope.get('function_name', 'Unknown')}
-- **函数范围**: 第{function_scope.get('start_line', 'Unknown')}-{function_scope.get('end_line', 'Unknown')}行
-- **函数类型**: {function_scope.get('scope_type', 'Unknown')}
-- **函数签名**: {function_scope.get('function_signature', 'Unknown')}
+- **函数名称**: {scope.get('function_name', 'Unknown')}
+- **函数范围**: 第{scope.get('start_line', 'Unknown')}-{scope.get('end_line', 'Unknown')}行
+- **函数类型**: {scope.get('scope_type', 'Unknown')}
+- **函数签名**: {scope.get('function_signature', 'Unknown')}
 
 **重要提示**:
 该问题位于函数内部，请特别注意：
