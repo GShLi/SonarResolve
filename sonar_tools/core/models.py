@@ -22,6 +22,7 @@ class SonarIssue:
     debt: Optional[str]
     effort: Optional[str]
     tags: List[str]
+    branch: str = None
     code_snippet: Optional[str] = None  # 从SonarQube获取的代码片段
     rule_info: Optional[Dict[str, Any]] = None  # 规则详细信息
 
