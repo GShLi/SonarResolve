@@ -501,12 +501,13 @@ class GitClient:
             logger.error(f"切换分支异常: {e}")
             return False
 
-    def pull_latest(self, repo_path: Path) -> bool:
+    def pull_latest(self, repo_path: Path, default_branch: str = "main") -> bool:
         """
-        拉取当前分支的最新代码
+        拉取默认分支的最新代码
 
         Args:
             repo_path: 仓库路径
+            default_branch: 默认分支名称
 
         Returns:
             拉取是否成功
@@ -519,7 +520,38 @@ class GitClient:
             repo = Repo(repo_path)
             origin = repo.remotes.origin
 
-            # 拉取最新代码
+            # 检查当前分支
+            current_branch = repo.active_branch.name
+            logger.info(f"当前分支: {current_branch}")
+
+            # 如果不在默认分支上，先切换到默认分支
+            if current_branch != default_branch:
+                logger.info(f"切换到默认分支: {default_branch}")
+                try:
+                    # 检查默认分支是否存在于本地
+                    if default_branch in repo.heads:
+                        repo.heads[default_branch].checkout()
+                    else:
+                        # 从远程分支创建本地默认分支
+                        remote_branch = f"origin/{default_branch}"
+                        if remote_branch in repo.refs:
+                            repo.create_head(default_branch, repo.refs[remote_branch])
+                            repo.heads[default_branch].set_tracking_branch(
+                                repo.refs[remote_branch]
+                            )
+                            repo.heads[default_branch].checkout()
+                        else:
+                            logger.error(f"远程默认分支 {remote_branch} 不存在")
+                            return False
+
+                    logger.info(f"已切换到默认分支: {default_branch}")
+
+                except Exception as e:
+                    logger.error(f"切换到默认分支失败: {e}")
+                    return False
+
+            # 拉取默认分支的最新代码
+            logger.info(f"拉取默认分支 {default_branch} 的最新代码...")
             pull_info = origin.pull()
 
             for info in pull_info:
@@ -527,17 +559,17 @@ class GitClient:
                     logger.error(f"拉取代码失败: {info.note}")
                     return False
                 elif info.flags & info.UP_TO_DATE:
-                    logger.info("代码已是最新")
+                    logger.info(f"默认分支 {default_branch} 代码已是最新")
                 elif info.flags & (info.NEW_TAG | info.NEW_HEAD | info.FAST_FORWARD):
-                    logger.info("成功拉取最新代码")
+                    logger.info(f"成功拉取默认分支 {default_branch} 的最新代码")
 
             return True
 
         except git.exc.GitCommandError as e:
-            logger.error(f"拉取代码失败: {e}")
+            logger.error(f"拉取默认分支代码失败: {e}")
             return False
         except Exception as e:
-            logger.error(f"拉取代码异常: {e}")
+            logger.error(f"拉取默认分支代码异常: {e}")
             return False
 
     def delete_branch(self, repo_path: Path, branch_name: str) -> bool:

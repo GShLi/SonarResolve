@@ -177,7 +177,7 @@ class AICodeFixer:
                 return False
 
             # 拉取最新代码
-            if not self.git_client.pull_latest(repo_path):
+            if not self.git_client.pull_latest(repo_path, repo_info["default_branch"]):
                 logger.error("拉取最新代码失败")
                 return False
 
