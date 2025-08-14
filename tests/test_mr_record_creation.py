@@ -66,7 +66,7 @@ def test_mr_record_creation():
     mr_success = sonar_service.add_issue_mr_record(
         sonar_issue_key=test_issue_key,
         mr_url="https://gitlab.example.com/project/repo/-/merge_requests/123",
-        mr_iid="123",
+        mr_id="123",
         mr_title="fix(sonar): 修复测试问题",
         mr_description="测试MR描述",
         branch_name="fix/sonar-test-001",
@@ -104,7 +104,9 @@ def test_mr_record_creation():
 
         # 再次检查是否需要修复
         result_after_reject = sonar_service.is_issue_need_fix(test_issue_key)
-        print(f"   驳回后需要修复: {'✅ 是' if result_after_reject['need_fix'] else '❌ 否'}")
+        print(
+            f"   驳回后需要修复: {'✅ 是' if result_after_reject['need_fix'] else '❌ 否'}"
+        )
         print(f"   原因: {result_after_reject['reason']}")
         print(f"   建议操作: {result_after_reject['action_required']}")
 

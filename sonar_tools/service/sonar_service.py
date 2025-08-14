@@ -102,7 +102,7 @@ class SonarService:
         self,
         sonar_issue_key: str,
         mr_url: str,
-        mr_iid: str = None,
+        mr_id: str = None,
         mr_title: str = None,
         mr_description: str = None,
         branch_name: str = None,
@@ -116,7 +116,7 @@ class SonarService:
         Args:
             sonar_issue_key: SonarQube问题Key
             mr_url: MR地址
-            mr_iid: MR的内部ID
+            mr_id: MR的内部ID
             mr_title: MR标题
             mr_description: MR描述
             branch_name: 分支名称
@@ -133,7 +133,7 @@ class SonarService:
                 success = self.project_db.create_mr_record(
                     sonar_issue_key=sonar_issue_key,
                     mr_url=mr_url,
-                    mr_iid=mr_iid,
+                    mr_id=mr_id,
                     mr_title=mr_title,
                     mr_description=mr_description,
                     branch_name=branch_name,

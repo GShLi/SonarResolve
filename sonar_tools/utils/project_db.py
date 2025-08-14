@@ -79,7 +79,7 @@ class ProjectStatusDB:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sonar_issue_key TEXT NOT NULL,
                     mr_url TEXT NOT NULL,
-                    mr_iid TEXT,
+                    mr_id TEXT,
                     mr_title TEXT,
                     mr_description TEXT,
                     branch_name TEXT,
@@ -402,7 +402,7 @@ class ProjectStatusDB:
         self,
         sonar_issue_key: str,
         mr_url: str,
-        mr_iid: str = None,
+        mr_id: str = None,
         mr_title: str = None,
         mr_description: str = None,
         branch_name: str = None,
@@ -416,7 +416,7 @@ class ProjectStatusDB:
         Args:
             sonar_issue_key: SonarQube问题Key
             mr_url: MR地址
-            mr_iid: MR的内部ID
+            mr_id: MR的内部ID
             mr_title: MR标题
             mr_description: MR描述
             branch_name: 分支名称
@@ -446,7 +446,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         INSERT INTO mr_records
-                        (sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                        (sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
                          branch_name, source_branch, target_branch, mr_status,
                          submitted_time, updated_time, is_latest)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
@@ -454,7 +454,7 @@ class ProjectStatusDB:
                         (
                             sonar_issue_key,
                             mr_url,
-                            mr_iid,
+                            mr_id,
                             mr_title,
                             mr_description,
                             branch_name,
@@ -537,7 +537,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records 
@@ -556,7 +556,7 @@ class ProjectStatusDB:
                                 "id": row[0],
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
-                                "mr_iid": row[3],
+                                "mr_id": row[3],
                                 "mr_title": row[4],
                                 "mr_description": row[5],
                                 "branch_name": row[6],
@@ -649,7 +649,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records
@@ -666,7 +666,7 @@ class ProjectStatusDB:
                                 "id": row[0],
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
-                                "mr_iid": row[3],
+                                "mr_id": row[3],
                                 "mr_title": row[4],
                                 "mr_description": row[5],
                                 "branch_name": row[6],
@@ -703,7 +703,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records
@@ -718,7 +718,7 @@ class ProjectStatusDB:
                             "id": row[0],
                             "sonar_issue_key": row[1],
                             "mr_url": row[2],
-                            "mr_iid": row[3],
+                            "mr_id": row[3],
                             "mr_title": row[4],
                             "mr_description": row[5],
                             "branch_name": row[6],
@@ -750,7 +750,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_iid,
+                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_id,
                                mr.mr_title, mr.mr_description, mr.branch_name,
                                mr.source_branch, mr.target_branch, mr.mr_status,
                                mr.rejection_reason, mr.submitted_time, mr.updated_time,
@@ -769,7 +769,7 @@ class ProjectStatusDB:
                                 "id": row[0],
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
-                                "mr_iid": row[3],
+                                "mr_id": row[3],
                                 "mr_title": row[4],
                                 "mr_description": row[5],
                                 "branch_name": row[6],

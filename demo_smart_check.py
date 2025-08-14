@@ -87,7 +87,7 @@ def demo_ai_fixer_smart_check():
                 sonar_service.add_issue_mr_record(
                     sonar_issue_key=issue_data["key"],
                     mr_url=f"https://gitlab.example.com/project/repo/-/merge_requests/{700+i}",
-                    mr_iid=str(700 + i),
+                    mr_id=str(700 + i),
                     mr_title=f"fix(sonar): 修复{issue_data['description']}",
                     mr_description=f"修复描述: {issue_data['description']}",
                     branch_name=f"fix/sonar-issue-{i}",

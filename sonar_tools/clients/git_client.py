@@ -658,7 +658,7 @@ class GitLabClient:
                 logger.error(f"无效的MR URL格式: {mr_url}")
                 return None
 
-            mr_iid = parts[-1]
+            mr_id = parts[-1]
             # 找到项目路径
             gitlab_base = f"{self.gitlab_url}/"
             if not mr_url.startswith(gitlab_base):
@@ -671,10 +671,10 @@ class GitLabClient:
 
             # 获取项目和MR
             project = self.gitlab_client.projects.get(project_path, lazy=True)
-            mr = project.mergerequests.get(mr_iid)
+            mr = project.mergerequests.get(mr_id)
 
             return {
-                "mr_iid": mr.iid,
+                "mr_id": mr.iid,
                 "title": mr.title,
                 "state": mr.state,  # opened, closed, merged
                 "merge_status": getattr(mr, "merge_status", None),

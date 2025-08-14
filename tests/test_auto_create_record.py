@@ -71,7 +71,7 @@ def test_auto_create_initial_record():
     mr_success = sonar_service.add_issue_mr_record(
         sonar_issue_key=new_issue_key,
         mr_url=f"https://gitlab.example.com/test/repo/-/merge_requests/{int(time.time())}",
-        mr_iid=str(int(time.time())),
+        mr_id=str(int(time.time())),
         mr_title="测试MR",
         mr_description="自动测试创建的MR",
         branch_name="test-branch",

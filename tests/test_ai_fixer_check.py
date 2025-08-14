@@ -95,7 +95,7 @@ def test_ai_fixer_issue_check():
     sonar_service.add_issue_mr_record(
         sonar_issue_key=issue_with_mr_key,
         mr_url="https://gitlab.example.com/project/repo/-/merge_requests/456",
-        mr_iid="456",
+        mr_id="456",
         mr_title="fix(sonar): 修复测试问题2",
         mr_description="测试MR描述2",
         branch_name="fix/sonar-test-002",
