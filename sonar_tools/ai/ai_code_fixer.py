@@ -226,7 +226,8 @@ class AICodeFixer:
                     mr_record_success = self.sonar_service.add_issue_mr_record(
                         sonar_issue_key=issue.key,
                         mr_url=mr_result["url"],
-                        mr_id=mr_result.get("iid"),
+                        mr_id=mr_result.get("id"),
+                        git_project_id=str(repo_info["id"]),  # 添加Git项目ID
                         mr_title=mr_info["title"],
                         mr_description=mr_info["description"],
                         branch_name=branch_name,

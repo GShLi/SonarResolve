@@ -75,11 +75,21 @@ class MRStatusSyncService:
 
             logger.info(f"找到 {len(pending_mrs)} 个待同步的MR")
 
-            # 提取MR URL列表
-            mr_urls = [mr["mr_url"] for mr in pending_mrs]
+            # 准备MR数据列表（包含项目ID和MR ID）
+            mr_data_list = []
+            for mr in pending_mrs:
+                mr_data_list.append(
+                    {
+                        "mr_url": mr["mr_url"],
+                        "git_project_id": mr.get("git_project_id"),
+                        "mr_id": mr.get("mr_id"),
+                    }
+                )
 
-            # 批量获取MR状态
-            mr_status_data = self.gitlab_client.batch_get_merge_request_status(mr_urls)
+            # 批量获取MR状态（优先使用项目ID和MR ID）
+            mr_status_data = self.gitlab_client.batch_get_merge_request_status_by_ids(
+                mr_data_list
+            )
 
             # 准备更新数据
             mr_updates = []

@@ -80,6 +80,7 @@ class ProjectStatusDB:
                     sonar_issue_key TEXT NOT NULL,
                     mr_url TEXT NOT NULL,
                     mr_id TEXT,
+                    git_project_id TEXT,
                     mr_title TEXT,
                     mr_description TEXT,
                     branch_name TEXT,
@@ -403,6 +404,7 @@ class ProjectStatusDB:
         sonar_issue_key: str,
         mr_url: str,
         mr_id: str = None,
+        git_project_id: str = None,
         mr_title: str = None,
         mr_description: str = None,
         branch_name: str = None,
@@ -417,6 +419,7 @@ class ProjectStatusDB:
             sonar_issue_key: SonarQube问题Key
             mr_url: MR地址
             mr_id: MR的内部ID
+            git_project_id: Git项目ID
             mr_title: MR标题
             mr_description: MR描述
             branch_name: 分支名称
@@ -446,15 +449,16 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         INSERT INTO mr_records
-                        (sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
+                        (sonar_issue_key, mr_url, mr_id, git_project_id, mr_title, mr_description,
                          branch_name, source_branch, target_branch, mr_status,
                          submitted_time, updated_time, is_latest)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE)
                     """,
                         (
                             sonar_issue_key,
                             mr_url,
                             mr_id,
+                            git_project_id,
                             mr_title,
                             mr_description,
                             branch_name,
@@ -537,7 +541,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, git_project_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records 
@@ -557,16 +561,17 @@ class ProjectStatusDB:
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
                                 "mr_id": row[3],
-                                "mr_title": row[4],
-                                "mr_description": row[5],
-                                "branch_name": row[6],
-                                "source_branch": row[7],
-                                "target_branch": row[8],
-                                "mr_status": row[9],
-                                "rejection_reason": row[10],
-                                "submitted_time": row[11],
-                                "updated_time": row[12],
-                                "is_latest": bool(row[13]),
+                                "git_project_id": row[4],
+                                "mr_title": row[5],
+                                "mr_description": row[6],
+                                "branch_name": row[7],
+                                "source_branch": row[8],
+                                "target_branch": row[9],
+                                "mr_status": row[10],
+                                "rejection_reason": row[11],
+                                "submitted_time": row[12],
+                                "updated_time": row[13],
+                                "is_latest": bool(row[14]),
                             }
                         )
 
@@ -649,7 +654,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, git_project_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records
@@ -667,16 +672,17 @@ class ProjectStatusDB:
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
                                 "mr_id": row[3],
-                                "mr_title": row[4],
-                                "mr_description": row[5],
-                                "branch_name": row[6],
-                                "source_branch": row[7],
-                                "target_branch": row[8],
-                                "mr_status": row[9],
-                                "rejection_reason": row[10],
-                                "submitted_time": row[11],
-                                "updated_time": row[12],
-                                "is_latest": bool(row[13]),
+                                "git_project_id": row[4],
+                                "mr_title": row[5],
+                                "mr_description": row[6],
+                                "branch_name": row[7],
+                                "source_branch": row[8],
+                                "target_branch": row[9],
+                                "mr_status": row[10],
+                                "rejection_reason": row[11],
+                                "submitted_time": row[12],
+                                "updated_time": row[13],
+                                "is_latest": bool(row[14]),
                             }
                         )
 
@@ -703,7 +709,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id, sonar_issue_key, mr_url, mr_id, mr_title, mr_description,
+                        SELECT id, sonar_issue_key, mr_url, mr_id, git_project_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
                         FROM mr_records
@@ -719,16 +725,17 @@ class ProjectStatusDB:
                             "sonar_issue_key": row[1],
                             "mr_url": row[2],
                             "mr_id": row[3],
-                            "mr_title": row[4],
-                            "mr_description": row[5],
-                            "branch_name": row[6],
-                            "source_branch": row[7],
-                            "target_branch": row[8],
-                            "mr_status": row[9],
-                            "rejection_reason": row[10],
-                            "submitted_time": row[11],
-                            "updated_time": row[12],
-                            "is_latest": bool(row[13]),
+                            "git_project_id": row[4],
+                            "mr_title": row[5],
+                            "mr_description": row[6],
+                            "branch_name": row[7],
+                            "source_branch": row[8],
+                            "target_branch": row[9],
+                            "mr_status": row[10],
+                            "rejection_reason": row[11],
+                            "submitted_time": row[12],
+                            "updated_time": row[13],
+                            "is_latest": bool(row[14]),
                         }
                     return None
 
@@ -750,7 +757,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_id,
+                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_id, mr.git_project_id,
                                mr.mr_title, mr.mr_description, mr.branch_name,
                                mr.source_branch, mr.target_branch, mr.mr_status,
                                mr.rejection_reason, mr.submitted_time, mr.updated_time,
@@ -770,17 +777,18 @@ class ProjectStatusDB:
                                 "sonar_issue_key": row[1],
                                 "mr_url": row[2],
                                 "mr_id": row[3],
-                                "mr_title": row[4],
-                                "mr_description": row[5],
-                                "branch_name": row[6],
-                                "source_branch": row[7],
-                                "target_branch": row[8],
-                                "mr_status": row[9],
-                                "rejection_reason": row[10],
-                                "submitted_time": row[11],
-                                "updated_time": row[12],
-                                "jira_task_key": row[13],
-                                "sonar_project_key": row[14],
+                                "git_project_id": row[4],
+                                "mr_title": row[5],
+                                "mr_description": row[6],
+                                "branch_name": row[7],
+                                "source_branch": row[8],
+                                "target_branch": row[9],
+                                "mr_status": row[10],
+                                "rejection_reason": row[11],
+                                "submitted_time": row[12],
+                                "updated_time": row[13],
+                                "jira_task_key": row[14],
+                                "sonar_project_key": row[15],
                             }
                         )
 

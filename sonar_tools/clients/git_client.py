@@ -640,6 +640,44 @@ class GitLabClient:
             logger.error(f"创建Merge Request失败: {e}")
             return None
 
+    def get_merge_request_status_by_id(
+        self, project_id: str, mr_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        根据项目ID和MR ID获取Merge Request状态
+
+        Args:
+            project_id: GitLab项目ID
+            mr_id: MR的IID
+
+        Returns:
+            MR状态信息，包含状态、title等
+        """
+        try:
+            # 直接使用项目ID和MR ID获取
+            project = self.gitlab_client.projects.get(project_id, lazy=True)
+            mr = project.mergerequests.get(mr_id)
+
+            return {
+                "mr_id": mr.iid,
+                "project_id": project_id,
+                "title": mr.title,
+                "state": mr.state,  # opened, closed, merged
+                "merge_status": getattr(mr, "merge_status", None),
+                "source_branch": mr.source_branch,
+                "target_branch": mr.target_branch,
+                "web_url": mr.web_url,
+                "created_at": mr.created_at,
+                "updated_at": mr.updated_at,
+                "merged_at": getattr(mr, "merged_at", None),
+                "author": mr.author.get("name", "") if mr.author else "",
+                "description": mr.description or "",
+            }
+
+        except Exception as e:
+            logger.error(f"获取MR状态失败 (项目ID: {project_id}, MR ID: {mr_id}): {e}")
+            return None
+
     def get_merge_request_status(self, mr_url: str) -> Optional[Dict[str, Any]]:
         """
         获取Merge Request状态
@@ -691,6 +729,51 @@ class GitLabClient:
         except Exception as e:
             logger.error(f"获取MR状态失败 {mr_url}: {e}")
             return None
+
+    def batch_get_merge_request_status_by_ids(
+        self, mr_data_list: List[Dict[str, str]]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        批量获取MR状态（使用项目ID和MR ID）
+
+        Args:
+            mr_data_list: MR数据列表，每个元素包含 {'mr_url': str, 'git_project_id': str, 'mr_id': str}
+
+        Returns:
+            字典，key为MR URL，value为状态信息
+        """
+        results = {}
+
+        for mr_data in mr_data_list:
+            mr_url = mr_data.get("mr_url")
+            git_project_id = mr_data.get("git_project_id")
+            mr_id = mr_data.get("mr_id")
+
+            if not mr_url:
+                continue
+
+            try:
+                # 优先使用项目ID和MR ID获取状态
+                if git_project_id and mr_id:
+                    status = self.get_merge_request_status_by_id(git_project_id, mr_id)
+                    if status:
+                        results[mr_url] = status
+                        continue
+
+                # 如果项目ID或MR ID不可用，回退到URL解析方式
+                status = self.get_merge_request_status(mr_url)
+                if status:
+                    results[mr_url] = status
+                else:
+                    logger.warning(f"无法获取MR状态: {mr_url}")
+
+            except Exception as e:
+                logger.error(f"获取MR状态异常 {mr_url}: {e}")
+
+        logger.info(
+            f"批量获取MR状态完成，成功获取 {len(results)}/{len(mr_data_list)} 个"
+        )
+        return results
 
     def batch_get_merge_request_status(
         self, mr_urls: List[str]

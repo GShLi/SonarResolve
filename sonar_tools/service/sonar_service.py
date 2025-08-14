@@ -103,6 +103,7 @@ class SonarService:
         sonar_issue_key: str,
         mr_url: str,
         mr_id: str = None,
+        git_project_id: str = None,
         mr_title: str = None,
         mr_description: str = None,
         branch_name: str = None,
@@ -117,6 +118,7 @@ class SonarService:
             sonar_issue_key: SonarQube问题Key
             mr_url: MR地址
             mr_id: MR的内部ID
+            git_project_id: Git项目ID
             mr_title: MR标题
             mr_description: MR描述
             branch_name: 分支名称
@@ -134,6 +136,7 @@ class SonarService:
                     sonar_issue_key=sonar_issue_key,
                     mr_url=mr_url,
                     mr_id=mr_id,
+                    git_project_id=git_project_id,
                     mr_title=mr_title,
                     mr_description=mr_description,
                     branch_name=branch_name,
