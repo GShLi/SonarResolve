@@ -508,6 +508,165 @@ class LangChainClient:
                 "error": str(e),
             }
 
+    def analyze_import_insertion(self, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        使用AI分析导入语句的最佳插入位置和去重
+
+        Args:
+            analysis_data: 包含文件内容、新导入语句等信息的字典
+
+        Returns:
+            分析结果字典
+        """
+        try:
+            # 构建导入分析提示词
+            system_prompt = """你是一个多编程语言的导入管理专家。你的任务是分析各种编程语言文件的导入/包含结构，确定新导入语句的最佳插入位置，并识别重复的导入。
+
+请根据不同编程语言的最佳实践：
+
+**Python (PEP 8):**
+1. 标准库导入在最前面
+2. 第三方库导入在中间  
+3. 本地应用导入在最后
+4. 每组导入之间用空行分隔
+
+**Java:**
+1. java.* 包在最前面
+2. javax.* 包其次
+3. 第三方库包
+4. 本地项目包在最后
+5. 静态导入在最后
+
+**JavaScript/TypeScript:**
+1. 外部库导入在前面
+2. 内部模块导入在后面
+3. 类型导入通常在前面(TypeScript)
+
+**C/C++:**
+1. 系统头文件用 <> 在前面
+2. 本地头文件用 "" 在后面
+
+**C#:**
+1. System 命名空间在最前面
+2. 第三方库命名空间
+3. 本地项目命名空间在最后
+
+**Go:**
+1. 标准库包在前面
+2. 第三方包
+3. 本地包在最后
+
+你必须以JSON格式回复：
+{
+  "success": true/false,
+  "language": "检测到的编程语言",
+  "insert_position": 行号(0-based),
+  "imports_to_add": ["需要添加的导入语句列表"],
+  "duplicate_imports": ["重复的导入语句列表"],
+  "import_style": "检测到的导入风格",
+  "reasoning": "分析说明",
+  "error": "错误信息(如果有)"
+}"""
+
+            user_prompt = f"""请分析以下代码文件的导入/包含结构，并确定新导入语句的最佳插入位置：
+
+**当前文件内容:**
+```
+{analysis_data['file_content']}
+```
+
+**需要添加的导入语句:**
+```
+{analysis_data['new_imports']}
+```
+
+**函数/类开始行号:** {analysis_data['function_start_line']} (1-based)
+**文件总行数:** {analysis_data['total_lines']}
+
+请分析：
+1. 自动检测编程语言类型
+2. 识别文件中现有的导入/包含结构
+3. 新导入语句中哪些已经存在（重复）
+4. 需要添加的新导入应该插入在哪一行（0-based行号）
+5. 确保插入位置符合该语言的最佳实践
+6. 确保插入位置在函数/类定义之前
+
+支持的语言包括但不限于：
+- Python (import, from...import)
+- Java (import, static import)
+- JavaScript/TypeScript (import, require)
+- C/C++ (#include)
+- C# (using)
+- Go (import)
+- Rust (use)
+- Kotlin (import)
+- Scala (import)
+
+注意：
+- 返回的行号是0-based（从0开始计数）
+- 如果所有导入都已存在，imports_to_add应为空列表
+- 考虑导入语句的分组和排序规则
+- 保持与现有代码风格的一致性"""
+
+            # 调用AI
+            response = self.chat(system_prompt, user_prompt)
+            result = self._parse_json_response(response)
+
+            if not result:
+                return {
+                    "success": False,
+                    "error": "无法解析AI响应",
+                    "raw_response": response,
+                }
+
+            # 验证结果格式
+            required_fields = [
+                "success",
+                "insert_position",
+                "imports_to_add",
+                "duplicate_imports",
+            ]
+            if not all(field in result for field in required_fields):
+                return {
+                    "success": False,
+                    "error": "AI响应格式不完整",
+                    "raw_response": response,
+                }
+
+            # 记录检测到的语言信息
+            detected_language = result.get("language", "未知")
+            import_style = result.get("import_style", "未知")
+
+            logger.info(
+                f"导入分析完成: 语言={detected_language}, 风格={import_style}, "
+                f"位置={result['insert_position']}, "
+                f"新增{len(result['imports_to_add'])}个, "
+                f"重复{len(result['duplicate_imports'])}个"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"导入分析失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "insert_position": 0,
+                "imports_to_add": [],
+                "duplicate_imports": [],
+            }
+
+    def _parse_json_response(self, response: str) -> dict:
+        """解析AI的JSON响应"""
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            logger.warning("AI响应不是有效的JSON格式")
+            return None
+        except Exception as e:
+            logger.error(f"解析JSON响应失败: {e}")
+            return None
+
     def test_connection(self) -> bool:
         """测试AI连接"""
         try:
