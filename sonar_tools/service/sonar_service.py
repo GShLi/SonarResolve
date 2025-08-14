@@ -241,9 +241,7 @@ class SonarService:
                 "current_status": issue_status or {"has_task": True},
                 "latest_mr": latest_mr,
                 "action_required": (
-                    "无需操作"
-                    if mr_status in ["merged", "closed"]
-                    else "等待MR处理结果"
+                    "无需操作" if mr_status in ["merged", "closed"] else "等待MR处理结果"
                 ),
             }
 

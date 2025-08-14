@@ -3,8 +3,8 @@
 测试自动创建初始记录功能
 """
 
-import sys
 import os
+import sys
 import time
 
 # 添加项目根目录到Python路径

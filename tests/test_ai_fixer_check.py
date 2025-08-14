@@ -3,15 +3,15 @@
 测试AI修复器的issue检查逻辑
 """
 
-import sys
 import os
+import sys
 import time
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from sonar_tools.service.sonar_service import SonarService
 from sonar_tools.core.models import SonarIssue
+from sonar_tools.service.sonar_service import SonarService
 
 
 def test_ai_fixer_issue_check():

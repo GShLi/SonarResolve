@@ -339,7 +339,9 @@ class ProjectStatusDB:
 
                     conn.commit()
                     if cursor.rowcount > 0:
-                        logger.debug(f"更新问题Jira信息: {sonar_issue_key} -> {jira_task_key}")
+                        logger.debug(
+                            f"更新问题Jira信息: {sonar_issue_key} -> {jira_task_key}"
+                        )
                         return True
                     else:
                         logger.warning(f"未找到需要更新的问题记录: {sonar_issue_key}")

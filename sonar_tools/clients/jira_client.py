@@ -79,12 +79,8 @@ class JiraClient:
         for i, sonar_issue in enumerate(sonar_issues, 1):
             # 检查是否达到任务创建限制
             if max_tasks > 0 and len(created_issues) >= max_tasks:
-                logger.warning(
-                    f"已达到单次创建任务限制 ({max_tasks} 个)，停止创建更多任务"
-                )
-                logger.info(
-                    f"剩余 {len(sonar_issues) - i + 1} 个问题将在下次运行时处理"
-                )
+                logger.warning(f"已达到单次创建任务限制 ({max_tasks} 个)，停止创建更多任务")
+                logger.info(f"剩余 {len(sonar_issues) - i + 1} 个问题将在下次运行时处理")
                 break
 
             logger.info(f"创建第 {i}/{len(sonar_issues)} 个Jira任务...")
@@ -109,9 +105,7 @@ class JiraClient:
                             jira_task_key=issue_key,
                             jira_project_key=project_key,
                         )
-                        logger.debug(
-                            f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}"
-                        )
+                        logger.debug(f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}")
                     except Exception as e:
                         logger.warning(f"记录新创建任务到缓存失败: {e}")
 
@@ -233,9 +227,7 @@ class JiraClient:
                 if sonar_issue.key in description or sonar_issue.key in summary:
                     task_exists = True
                     existing_task = issue
-                    logger.debug(
-                        f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}"
-                    )
+                    logger.debug(f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}")
                     break
 
             if task_exists:
