@@ -4,12 +4,11 @@ SonarQube业务服务
 处理与SonarQube相关的业务逻辑
 """
 
-import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from ..core.models import SonarIssue
-from ..utils.project_db import ProjectStatusDB
+from sonar_tools.core.models import SonarIssue
+from sonar_tools.utils.project_db import ProjectStatusDB
+from sonar_tools.core.config import Config
 
 logger = Config.setup_logging(__name__)
 
@@ -241,7 +240,9 @@ class SonarService:
                 "current_status": issue_status or {"has_task": True},
                 "latest_mr": latest_mr,
                 "action_required": (
-                    "无需操作" if mr_status in ["merged", "closed"] else "等待MR处理结果"
+                    "无需操作"
+                    if mr_status in ["merged", "closed"]
+                    else "等待MR处理结果"
                 ),
             }
 

@@ -21,7 +21,7 @@ class ProjectStatusDB:
         # 如果没有指定路径，使用配置中的默认路径
         if db_path is None:
             try:
-                from ..core.config import Config
+                from sonar_tools.core.config import Config
 
                 db_path = Config.DATABASE_PATH
             except ImportError:

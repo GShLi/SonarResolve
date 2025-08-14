@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
-from ..core.config import Config
+from sonar_tools.core.config import Config
 
 logger = Config.setup_logging(__name__)
 
@@ -145,7 +145,9 @@ class GitClient:
                 logger.info(f"本地仓库已存在，执行git pull: {local_repo_path}")
                 return self._git_pull(local_repo_path, repo_info["default_branch"])
             else:
-                logger.info(f"克隆仓库到本地: {repo_info['full_path']} -> {local_repo_path}")
+                logger.info(
+                    f"克隆仓库到本地: {repo_info['full_path']} -> {local_repo_path}"
+                )
                 return self._git_clone(
                     clone_url, local_repo_path, repo_info["default_branch"]
                 )
@@ -257,7 +259,9 @@ class GitClient:
                             return False, None
 
                 except Exception as e:
-                    logger.warning(f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}")
+                    logger.warning(
+                        f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}"
+                    )
 
             # 执行git pull
             logger.info(f"执行git pull: {repo_path}")
@@ -297,7 +301,9 @@ class GitClient:
                     # 执行merge
                     try:
                         repo.git.merge(tracking_branch)
-                        logger.info(f"Git pull成功，合并了 {len(commits_behind)} 个提交")
+                        logger.info(
+                            f"Git pull成功，合并了 {len(commits_behind)} 个提交"
+                        )
                         return True, repo_path
                     except git.exc.GitCommandError as e:
                         logger.error(f"Git merge失败: {e}")

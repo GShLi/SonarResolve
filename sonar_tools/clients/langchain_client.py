@@ -8,7 +8,7 @@ from typing import Any, Dict
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from ..core.config import Config
+from sonar_tools.core.config import Config
 
 logger = Config.setup_logging(__name__)
 
