@@ -411,9 +411,11 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
 
         # 检查是否启用调度器
-        if not scheduler.enabled:
+        if not scheduler.main_task_enabled and not scheduler.mr_sync_enabled:
             logger.info("调度器未启用")
-            logger.info("要启用调度器，请在.env文件中设置 SCHEDULER_ENABLED=true")
+            logger.info(
+                "要启用调度器，请在.env文件中设置 SCHEDULER_ENABLED=true 或 MR_SYNC_ENABLED=true"
+            )
 
             # 提供手动执行选项
             response = input("是否要立即执行一次任务？(y/n): ").lower()
@@ -436,11 +438,31 @@ def main():
                     time.sleep(60)  # 每分钟显示一次状态
 
                     status = scheduler.get_status()
-                    if status["next_run_time"]:
-                        logger.debug(
-                            f"调度器运行中，下次执行: "
-                            f"{status['next_run_time'].strftime('%Y-%m-%d %H:%M:%S')}"
-                        )
+
+                    # 显示各个任务的下次执行时间
+                    if status["running"]:
+                        task_info = []
+
+                        if status["tasks"]["main_task"]["enabled"]:
+                            main_next = status["tasks"]["main_task"]["stats"][
+                                "next_run"
+                            ]
+                            if main_next:
+                                task_info.append(
+                                    f"主任务: {main_next.strftime('%Y-%m-%d %H:%M:%S')}"
+                                )
+
+                        if status["tasks"]["mr_sync"]["enabled"]:
+                            mr_next = status["tasks"]["mr_sync"]["stats"]["next_run"]
+                            if mr_next:
+                                task_info.append(
+                                    f"MR同步: {mr_next.strftime('%Y-%m-%d %H:%M:%S')}"
+                                )
+
+                        if task_info:
+                            logger.debug(
+                                f"调度器运行中，下次执行时间 - {', '.join(task_info)}"
+                            )
 
                 except KeyboardInterrupt:
                     break
