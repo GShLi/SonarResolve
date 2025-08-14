@@ -20,6 +20,7 @@ except ImportError:
 from .core.config import Config
 from .main import SonarToJiraProcessor
 from .service.mr_sync_service import MRStatusSyncService
+from .ai.ai_code_fixer import AICodeFixer
 
 logger = Config.setup_logging(__name__)
 
@@ -44,6 +45,10 @@ class TaskScheduler:
         self.mr_sync_enabled = Config.MR_SYNC_ENABLED
         self.mr_sync_cron = Config.MR_SYNC_CRON_EXPRESSION
 
+        # AI代码修复任务配置
+        self.ai_fixer_enabled = Config.AI_FIXER_ENABLED
+        self.ai_fixer_cron = Config.AI_FIXER_CRON_EXPRESSION
+
         self.timezone = Config.SCHEDULER_TIMEZONE
 
         self.running = False
@@ -60,6 +65,13 @@ class TaskScheduler:
                 "next_run": None,
             },
             "mr_sync": {
+                "total_runs": 0,
+                "successful_runs": 0,
+                "failed_runs": 0,
+                "last_run": None,
+                "next_run": None,
+            },
+            "ai_fixer": {
                 "total_runs": 0,
                 "successful_runs": 0,
                 "failed_runs": 0,
@@ -89,6 +101,17 @@ class TaskScheduler:
         if self.mr_sync_enabled:
             logger.info(f"    - Cron表达式: {self.mr_sync_cron}")
             next_run = self._get_next_run_time(self.mr_sync_cron)
+            if next_run:
+                logger.info(
+                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+
+        logger.info(
+            f"  - AI代码修复任务状态: {'启用' if self.ai_fixer_enabled else '禁用'}"
+        )
+        if self.ai_fixer_enabled:
+            logger.info(f"    - Cron表达式: {self.ai_fixer_cron}")
+            next_run = self._get_next_run_time(self.ai_fixer_cron)
             if next_run:
                 logger.info(
                     f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -222,6 +245,61 @@ class TaskScheduler:
 
         return result
 
+    def _execute_ai_fixer_task(self) -> Dict[str, Any]:
+        """执行AI代码修复任务"""
+        logger.info("开始执行AI代码修复任务...")
+
+        execution_start = datetime.now()
+        result = {
+            "task_name": "ai_fixer",
+            "start_time": execution_start,
+            "success": False,
+            "error": None,
+            "results": None,
+        }
+
+        try:
+            # 创建AI代码修复器并执行任务
+            ai_fixer = AICodeFixer()
+
+            # 测试连接
+            if not ai_fixer.test_connection():
+                raise Exception("AI代码修复器连接测试失败")
+
+            # 处理Critical问题
+            success = ai_fixer.process_critical_issues(
+                max_issues=Config.AI_FIXER_MAX_ISSUES
+            )
+
+            result["success"] = success
+            if success:
+                # 记录成功统计
+                self.task_stats["ai_fixer"]["successful_runs"] += 1
+                logger.info("AI代码修复任务执行成功")
+
+                # 记录任务统计信息（这里可以从ai_fixer获取更详细的统计信息）
+                result["results"] = {
+                    "message": "AI代码修复任务完成",
+                    "max_issues": Config.AI_FIXER_MAX_ISSUES,
+                }
+            else:
+                raise Exception("AI代码修复任务执行失败")
+
+        except Exception as e:
+            result["error"] = str(e)
+            self.task_stats["ai_fixer"]["failed_runs"] += 1
+            logger.error(f"AI代码修复任务执行失败: {e}")
+
+        finally:
+            result["end_time"] = datetime.now()
+            result["duration"] = result["end_time"] - execution_start
+            self.task_stats["ai_fixer"]["total_runs"] += 1
+            self.task_stats["ai_fixer"]["last_run"] = execution_start
+
+            logger.info(f"AI代码修复任务执行耗时: {result['duration']}")
+
+        return result
+
     def _task_scheduler_loop(self, task_name: str, cron_expr: str, task_executor):
         """单个任务的调度循环"""
         logger.info(f"任务 [{task_name}] 调度循环启动")
@@ -283,6 +361,14 @@ class TaskScheduler:
                 return False
             tasks_to_start.append(
                 ("mr_sync", self.mr_sync_cron, self._execute_mr_sync_task)
+            )
+
+        if self.ai_fixer_enabled:
+            if not self._validate_cron_expression(self.ai_fixer_cron):
+                logger.error("AI代码修复任务cron表达式验证失败")
+                return False
+            tasks_to_start.append(
+                ("ai_fixer", self.ai_fixer_cron, self._execute_ai_fixer_task)
             )
 
         if not tasks_to_start:
@@ -347,6 +433,10 @@ class TaskScheduler:
                     self.task_stats[task_name]["next_run"] = self._get_next_run_time(
                         self.mr_sync_cron
                     )
+                elif task_name == "ai_fixer" and self.ai_fixer_enabled:
+                    self.task_stats[task_name]["next_run"] = self._get_next_run_time(
+                        self.ai_fixer_cron
+                    )
 
         status = {
             "running": self.running,
@@ -362,6 +452,11 @@ class TaskScheduler:
                     "cron_expression": self.mr_sync_cron,
                     "stats": self.task_stats["mr_sync"],
                 },
+                "ai_fixer": {
+                    "enabled": self.ai_fixer_enabled,
+                    "cron_expression": self.ai_fixer_cron,
+                    "stats": self.task_stats["ai_fixer"],
+                },
             },
             "timezone": self.timezone,
         }
@@ -373,7 +468,7 @@ class TaskScheduler:
         立即执行一次指定任务（不影响定时调度）
 
         Args:
-            task_name: 任务名称，'main_task' 或 'mr_sync'
+            task_name: 任务名称，'main_task'、'mr_sync' 或 'ai_fixer'
         """
         logger.info(f"手动执行任务: {task_name}")
 
@@ -381,6 +476,8 @@ class TaskScheduler:
             return self._execute_main_task()
         elif task_name == "mr_sync":
             return self._execute_mr_sync_task()
+        elif task_name == "ai_fixer":
+            return self._execute_ai_fixer_task()
         else:
             return {
                 "success": False,
@@ -411,10 +508,14 @@ def main():
         signal.signal(signal.SIGTERM, signal_handler)
 
         # 检查是否启用调度器
-        if not scheduler.main_task_enabled and not scheduler.mr_sync_enabled:
+        if (
+            not scheduler.main_task_enabled
+            and not scheduler.mr_sync_enabled
+            and not scheduler.ai_fixer_enabled
+        ):
             logger.info("调度器未启用")
             logger.info(
-                "要启用调度器，请在.env文件中设置 SCHEDULER_ENABLED=true 或 MR_SYNC_ENABLED=true"
+                "要启用调度器，请在.env文件中设置 SCHEDULER_ENABLED=true、MR_SYNC_ENABLED=true 或 AI_FIXER_ENABLED=true"
             )
 
             # 提供手动执行选项

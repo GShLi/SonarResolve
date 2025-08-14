@@ -102,6 +102,14 @@ class Config:
     # MR状态同步时查询最近几天的MR
     MR_SYNC_DAYS_BACK = int(os.getenv("MR_SYNC_DAYS_BACK", "7"))
 
+    # AI代码修复配置
+    # AI代码修复的Cron表达式，默认每6小时执行一次
+    AI_FIXER_CRON_EXPRESSION = os.getenv("AI_FIXER_CRON_EXPRESSION", "0 */6 * * *")
+    # 是否启用AI代码修复
+    AI_FIXER_ENABLED = os.getenv("AI_FIXER_ENABLED", "false").lower() == "true"
+    # AI代码修复单次处理的最大问题数量
+    AI_FIXER_MAX_ISSUES = int(os.getenv("AI_FIXER_MAX_ISSUES", "10"))
+
     @classmethod
     def validate_config(cls) -> bool:
         """验证配置是否完整"""
