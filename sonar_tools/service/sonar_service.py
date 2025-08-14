@@ -168,9 +168,21 @@ class SonarService:
         try:
             # 情况1：检查问题是否已创建记录
             if not self.project_db.is_task_created(sonar_issue_key):
+                # 先创建一条记录，jira字段设为null
+                try:
+                    self.project_db.record_created_task(
+                        sonar_issue_key=sonar_issue_key,
+                        jira_task_key=None,
+                        jira_project_key=None,
+                        sonar_project_key=None,
+                    )
+                    logger.info(f"为问题创建初始记录: {sonar_issue_key}")
+                except Exception as e:
+                    logger.error(f"创建初始记录失败: {e}")
+
                 return {
                     "need_fix": True,
-                    "reason": "未找到 issue 记录",
+                    "reason": "未找到 issue 记录，已创建初始记录",
                     "current_status": None,
                     "latest_mr": None,
                     "action_required": "创建问题记录并开始修复流程",
@@ -211,7 +223,9 @@ class SonarService:
                 "current_status": issue_status or {"has_task": True},
                 "latest_mr": latest_mr,
                 "action_required": (
-                    "无需操作" if mr_status in ["merged", "closed"] else "等待MR处理结果"
+                    "无需操作"
+                    if mr_status in ["merged", "closed"]
+                    else "等待MR处理结果"
                 ),
             }
 

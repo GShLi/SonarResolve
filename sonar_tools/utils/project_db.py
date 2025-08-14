@@ -62,9 +62,9 @@ class ProjectStatusDB:
                 CREATE TABLE IF NOT EXISTS sonar_issue (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sonar_issue_key TEXT UNIQUE NOT NULL,
-                    jira_task_key TEXT NOT NULL,
-                    jira_project_key TEXT NOT NULL,
-                    sonar_project_key TEXT NOT NULL,
+                    jira_task_key TEXT,
+                    jira_project_key TEXT,
+                    sonar_project_key TEXT,
                     created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (sonar_project_key) REFERENCES created_projects (sonar_project_key)
@@ -262,18 +262,18 @@ class ProjectStatusDB:
     def record_created_task(
         self,
         sonar_issue_key: str,
-        jira_task_key: str,
-        jira_project_key: str,
-        sonar_project_key: str,
+        jira_task_key: str = None,
+        jira_project_key: str = None,
+        sonar_project_key: str = None,
     ):
         """
         记录已创建的SonarQube问题
 
         Args:
             sonar_issue_key: SonarQube问题Key
-            jira_task_key: Jira任务Key
-            jira_project_key: Jira项目Key
-            sonar_project_key: SonarQube项目Key
+            jira_task_key: Jira任务Key，可以为None
+            jira_project_key: Jira项目Key，可以为None
+            sonar_project_key: SonarQube项目Key，可以为None
         """
         try:
             with self.lock:
@@ -296,7 +296,10 @@ class ProjectStatusDB:
                     )
 
                     conn.commit()
-                    logger.debug(f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}")
+                    if jira_task_key:
+                        logger.debug(f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}")
+                    else:
+                        logger.debug(f"创建问题记录: {sonar_issue_key} (Jira任务待创建)")
 
         except Exception as e:
             logger.error(f"记录问题创建失败: {e}")
