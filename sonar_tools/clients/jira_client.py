@@ -1,4 +1,3 @@
-import logging
 import re
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +7,7 @@ from sonar_tools.core.config import Config
 from sonar_tools.core.models import JiraTask, SonarIssue
 from sonar_tools.service.sonar_service import SonarService
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class JiraClient:

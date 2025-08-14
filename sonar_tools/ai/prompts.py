@@ -27,7 +27,7 @@ class PromptTemplates:
 {
   "analysis": {
     "issue_type": "问题类型分类",
-    "root_cause": "问题根本原因的详细分析", 
+    "root_cause": "问题根本原因的详细分析",
     "risk_level": "低/中/高",
     "complexity": "修复复杂度(简单/中等/复杂)",
     "impact_scope": "影响范围评估"
@@ -111,7 +111,7 @@ class PromptTemplates:
   "quality_grade": "A/B/C/D/F",
   "detailed_scores": {
     "sonar_compliance": "评分1-5",
-    "functionality": "评分1-5", 
+    "functionality": "评分1-5",
     "code_quality": "评分1-5",
     "security": "评分1-5"
   },

@@ -3,10 +3,9 @@ AI代码修复器
 集成LangChain、SonarQube和GitLab，实现自动代码修复
 """
 
-import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List
 
 from ..clients.git_client import GitClient, GitLabClient
 from ..clients.langchain_client import LangChainClient
@@ -15,7 +14,7 @@ from ..core.config import Config
 from ..core.models import SonarIssue
 from ..service.sonar_service import SonarService
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class AICodeFixer:
@@ -654,7 +653,7 @@ class AICodeFixer:
                 logger.info("检测到拆分格式的修复代码")
                 imports_code = fixed_code_data.get("imports", "")
                 function_code = fixed_code_data.get("function_code", "")
-                full_code = fixed_code_data.get("full_code", "")
+                # full_code = fixed_code_data.get("full_code", "")
 
                 if imports_code:
                     logger.info(f"包含导入语句: {len(imports_code)} 字符")

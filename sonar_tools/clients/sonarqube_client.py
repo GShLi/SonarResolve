@@ -1,4 +1,3 @@
-import logging
 import re
 from typing import Any, Dict, List
 from urllib.parse import urljoin
@@ -8,7 +7,7 @@ import requests
 from sonar_tools.core.config import Config
 from sonar_tools.core.models import SonarIssue
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class SonarQubeClient:
@@ -102,9 +101,13 @@ class SonarQubeClient:
                     if rule_key:
                         rule_info = self.get_rule_info(rule_key)
                         sonar_issue.rule_info = rule_info
-                        logger.debug(f"为问题 {sonar_issue.key} 添加规则信息: {rule_key}")
+                        logger.debug(
+                            f"为问题 {sonar_issue.key} 添加规则信息: {rule_key}"
+                        )
 
-                        logger.info(f"获取项目 {project_key} 第 {page} 页的Critical问题...")
+                        logger.info(
+                            f"获取项目 {project_key} 第 {page} 页的Critical问题..."
+                        )
                     if Config.SONARQUBE_FETCH_CODE_SNIPPET:
                         code_snippet = self.get_issue_code_snippet(issue_data)
                         sonar_issue.code_snippet = code_snippet
@@ -252,7 +255,9 @@ class SonarQubeClient:
                     code_lines.append(f"{line_number:4d}: {code_content}")
 
                 except Exception as parse_error:
-                    logger.debug(f"解析源代码行失败: {parse_error}, source_line: {source_line}")
+                    logger.debug(
+                        f"解析源代码行失败: {parse_error}, source_line: {source_line}"
+                    )
                     # 添加错误行但不中断处理
                     code_lines.append(f"   ?: {str(source_line)}")
 

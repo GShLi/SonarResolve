@@ -3,14 +3,15 @@ Git 管理器
 增强版本，支持自动发现GitLab仓库并执行git pull
 """
 
-import logging
-import os
 import re
 import shutil
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
+
+from ..core.config import Config
+
+logger = Config.setup_logging(__name__)
 
 try:
     import gitlab
@@ -18,7 +19,7 @@ try:
     GITLAB_AVAILABLE = True
 except ImportError:
     GITLAB_AVAILABLE = False
-    logging.warning("GitLab库未安装，某些功能将不可用")
+    logger.warning("GitLab库未安装，某些功能将不可用")
 
 try:
     import git
@@ -27,11 +28,7 @@ try:
     GITPYTHON_AVAILABLE = True
 except ImportError:
     GITPYTHON_AVAILABLE = False
-    logging.warning("GitPython库未安装，某些功能将不可用")
-
-from ..core.config import Config
-
-logger = logging.getLogger(__name__)
+    logger.warning("GitPython库未安装，某些功能将不可用")
 
 
 class GitClient:

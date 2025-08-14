@@ -4,14 +4,14 @@
 用于本地缓存Jira项目创建状态，减少API调用次数
 """
 
-import logging
 import sqlite3
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from sonar_tools.core.config import Config
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class ProjectStatusDB:
@@ -98,21 +98,21 @@ class ProjectStatusDB:
                 # 创建索引以提高查询性能
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_created_projects_sonar_key 
+                CREATE INDEX IF NOT EXISTS idx_created_projects_sonar_key
                 ON created_projects (sonar_project_key)
                 """
                 )
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_sonar_issue_sonar_key 
+                CREATE INDEX IF NOT EXISTS idx_sonar_issue_sonar_key
                 ON sonar_issue (sonar_issue_key)
                 """
                 )
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_sonar_issue_project 
+                CREATE INDEX IF NOT EXISTS idx_sonar_issue_project
                 ON sonar_issue (sonar_project_key)
                 """
                 )
@@ -120,21 +120,21 @@ class ProjectStatusDB:
                 # 创建MR记录表的索引
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_mr_records_sonar_issue 
+                CREATE INDEX IF NOT EXISTS idx_mr_records_sonar_issue
                 ON mr_records (sonar_issue_key)
                 """
                 )
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_mr_records_status 
+                CREATE INDEX IF NOT EXISTS idx_mr_records_status
                 ON mr_records (mr_status)
                 """
                 )
 
                 cursor.execute(
                     """
-                CREATE INDEX IF NOT EXISTS idx_mr_records_latest 
+                CREATE INDEX IF NOT EXISTS idx_mr_records_latest
                 ON mr_records (is_latest)
                 """
                 )
@@ -189,7 +189,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT jira_project_key
-                        FROM created_projects 
+                        FROM created_projects
                         WHERE sonar_project_key = ?
                     """,
                         (sonar_project_key,),
@@ -217,7 +217,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        INSERT OR REPLACE INTO created_projects 
+                        INSERT OR REPLACE INTO created_projects
                         (sonar_project_key, jira_project_key, created_by_us, created_time)
                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                     """,
@@ -225,7 +225,9 @@ class ProjectStatusDB:
                     )
 
                     conn.commit()
-                    logger.info(f"记录已创建项目: {sonar_project_key} -> {jira_project_key}")
+                    logger.info(
+                        f"记录已创建项目: {sonar_project_key} -> {jira_project_key}"
+                    )
 
         except Exception as e:
             logger.error(f"记录项目创建失败: {e}")
@@ -247,9 +249,9 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT id FROM sonar_issue 
-                        WHERE sonar_issue_key = ? 
-                        AND jira_task_key IS NOT NULL 
+                        SELECT id FROM sonar_issue
+                        WHERE sonar_issue_key = ?
+                        AND jira_task_key IS NOT NULL
                         AND jira_project_key IS NOT NULL
                     """,
                         (sonar_issue_key,),
@@ -284,8 +286,8 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        INSERT OR REPLACE INTO sonar_issue 
-                        (sonar_issue_key, jira_task_key, jira_project_key, 
+                        INSERT OR REPLACE INTO sonar_issue
+                        (sonar_issue_key, jira_task_key, jira_project_key,
                          sonar_project_key, created_time, updated_time)
                         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     """,
@@ -299,9 +301,13 @@ class ProjectStatusDB:
 
                     conn.commit()
                     if jira_task_key:
-                        logger.debug(f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}")
+                        logger.debug(
+                            f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}"
+                        )
                     else:
-                        logger.debug(f"创建问题记录: {sonar_issue_key} (Jira任务待创建)")
+                        logger.debug(
+                            f"创建问题记录: {sonar_issue_key} (Jira任务待创建)"
+                        )
 
         except Exception as e:
             logger.error(f"记录问题创建失败: {e}")
@@ -330,7 +336,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        UPDATE sonar_issue 
+                        UPDATE sonar_issue
                         SET jira_task_key = ?, jira_project_key = ?, updated_time = CURRENT_TIMESTAMP
                         WHERE sonar_issue_key = ?
                     """,
@@ -370,7 +376,7 @@ class ProjectStatusDB:
                         """
                         SELECT sonar_issue_key, jira_task_key, jira_project_key, sonar_project_key,
                                created_time, updated_time
-                        FROM sonar_issue 
+                        FROM sonar_issue
                         WHERE sonar_issue_key = ?
                     """,
                         (sonar_issue_key,),
@@ -429,7 +435,7 @@ class ProjectStatusDB:
                     # 将之前的记录标记为非最新
                     cursor.execute(
                         """
-                        UPDATE mr_records 
+                        UPDATE mr_records
                         SET is_latest = FALSE, updated_time = CURRENT_TIMESTAMP
                         WHERE sonar_issue_key = ? AND is_latest = TRUE
                     """,
@@ -439,7 +445,7 @@ class ProjectStatusDB:
                     # 插入新的MR记录
                     cursor.execute(
                         """
-                        INSERT INTO mr_records 
+                        INSERT INTO mr_records
                         (sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
                          branch_name, source_branch, target_branch, mr_status,
                          submitted_time, updated_time, is_latest)
@@ -488,7 +494,7 @@ class ProjectStatusDB:
                     if rejection_reason:
                         cursor.execute(
                             """
-                            UPDATE mr_records 
+                            UPDATE mr_records
                             SET mr_status = ?, rejection_reason = ?, updated_time = CURRENT_TIMESTAMP
                             WHERE mr_url = ?
                         """,
@@ -497,7 +503,7 @@ class ProjectStatusDB:
                     else:
                         cursor.execute(
                             """
-                            UPDATE mr_records 
+                            UPDATE mr_records
                             SET mr_status = ?, updated_time = CURRENT_TIMESTAMP
                             WHERE mr_url = ?
                         """,
@@ -534,7 +540,7 @@ class ProjectStatusDB:
                         SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
-                        FROM mr_records 
+                        FROM mr_records
                         WHERE sonar_issue_key = ?
                         ORDER BY submitted_time DESC
                     """,
@@ -588,7 +594,7 @@ class ProjectStatusDB:
                         SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
-                        FROM mr_records 
+                        FROM mr_records
                         WHERE sonar_issue_key = ? AND is_latest = TRUE
                     """,
                         (sonar_issue_key,),
@@ -632,7 +638,7 @@ class ProjectStatusDB:
 
                     cursor.execute(
                         """
-                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_iid, 
+                        SELECT mr.id, mr.sonar_issue_key, mr.mr_url, mr.mr_iid,
                                mr.mr_title, mr.mr_description, mr.branch_name,
                                mr.source_branch, mr.target_branch, mr.mr_status,
                                mr.rejection_reason, mr.submitted_time, mr.updated_time,
@@ -692,7 +698,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT DATE(created_time) as date, COUNT(*) as count
-                        FROM created_projects 
+                        FROM created_projects
                         GROUP BY DATE(created_time)
                         ORDER BY date DESC
                         LIMIT 7
@@ -732,7 +738,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT sonar_project_key, COUNT(*) as task_count
-                        FROM sonar_issue 
+                        FROM sonar_issue
                         GROUP BY sonar_project_key
                         ORDER BY task_count DESC
                         LIMIT 10
@@ -749,7 +755,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT fix_status, COUNT(*) as count
-                        FROM sonar_issue 
+                        FROM sonar_issue
                         GROUP BY fix_status
                         ORDER BY count DESC
                     """
@@ -763,7 +769,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT mr_status, COUNT(*) as count
-                        FROM sonar_issue 
+                        FROM sonar_issue
                         GROUP BY mr_status
                         ORDER BY count DESC
                     """
@@ -781,7 +787,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT mr_status, COUNT(*) as count
-                        FROM mr_records 
+                        FROM mr_records
                         GROUP BY mr_status
                         ORDER BY count DESC
                     """
@@ -796,7 +802,7 @@ class ProjectStatusDB:
                     # 被驳回的MR数量
                     cursor.execute(
                         """
-                        SELECT COUNT(*) FROM mr_records 
+                        SELECT COUNT(*) FROM mr_records
                         WHERE mr_status = 'rejected'
                     """
                     )
@@ -835,7 +841,7 @@ class ProjectStatusDB:
                     # 清理旧的问题记录
                     cursor.execute(
                         """
-                        DELETE FROM sonar_issue 
+                        DELETE FROM sonar_issue
                         WHERE created_time < ?
                     """,
                         (cutoff_time.isoformat(),),
@@ -846,7 +852,7 @@ class ProjectStatusDB:
                     # 清理旧的MR记录
                     cursor.execute(
                         """
-                        DELETE FROM mr_records 
+                        DELETE FROM mr_records
                         WHERE submitted_time < ?
                     """,
                         (cutoff_time.isoformat(),),
@@ -857,7 +863,7 @@ class ProjectStatusDB:
                     # 清理旧的项目记录
                     cursor.execute(
                         """
-                        DELETE FROM created_projects 
+                        DELETE FROM created_projects
                         WHERE created_time < ?
                     """,
                         (cutoff_time.isoformat(),),
@@ -894,7 +900,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT sonar_project_key, jira_project_key, created_time
-                        FROM created_projects 
+                        FROM created_projects
                         ORDER BY created_time DESC
                     """
                     )
@@ -933,7 +939,7 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT sonar_issue_key, jira_task_key, created_time, updated_time
-                        FROM sonar_issue 
+                        FROM sonar_issue
                         WHERE sonar_project_key = ?
                         ORDER BY updated_time DESC
                     """,

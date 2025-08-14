@@ -46,20 +46,24 @@ SonarResolve/
 ## 🚀 主要功能特性
 
 ### 1. 自动目录创建
+
 - 系统启动时自动创建 `logs` 目录
 - 无需手动创建目录结构
 
 ### 2. 日志文件轮转
+
 - 当日志文件达到最大大小时自动轮转
 - 保留指定数量的备份文件
 - 使用 `RotatingFileHandler` 实现
 
 ### 3. 双重输出
+
 - 同时输出到日志文件和控制台
 - 控制台输出便于开发调试
 - 文件输出便于生产环境日志保存
 
 ### 4. 灵活配置
+
 - 支持环境变量自定义所有日志参数
 - 支持相对路径和绝对路径
 - 支持不同日志级别过滤
@@ -67,6 +71,7 @@ SonarResolve/
 ## 📖 核心方法
 
 ### `Config.setup_logging()`
+
 ```python
 @classmethod
 def setup_logging(cls) -> str:
@@ -77,12 +82,14 @@ def setup_logging(cls) -> str:
         str: 实际的日志文件路径
     """
 ```
+
 - 创建日志目录
 - 配置文件和控制台处理器
 - 设置日志格式和轮转规则
 - 返回实际的日志文件路径
 
 ### `Config.get_log_info()`
+
 ```python
 @classmethod
 def get_log_info(cls) -> dict:
@@ -93,6 +100,7 @@ def get_log_info(cls) -> dict:
         dict: 包含所有日志配置的字典
     """
 ```
+
 - 返回完整的日志配置信息
 - 包含文件路径、级别、大小限制等
 - 包含目录和文件存在状态
@@ -100,6 +108,7 @@ def get_log_info(cls) -> dict:
 ## 🧪 测试验证
 
 ### 测试脚本
+
 已创建 `test_simple_log.py` 用于验证日志功能：
 
 ```bash
@@ -107,6 +116,7 @@ python test_simple_log.py
 ```
 
 ### 测试内容
+
 - ✅ 配置信息读取
 - ✅ 日志目录自动创建
 - ✅ 日志文件写入
@@ -116,14 +126,17 @@ python test_simple_log.py
 ## 🔒 安全与维护
 
 ### Git 忽略
+
 - 日志目录已添加到 `.gitignore`
 - 避免日志文件被提交到版本控制
 
 ### 权限处理
+
 - 自动处理目录创建权限
 - 支持 Windows 和 Linux 系统
 
 ### 错误处理
+
 - 完善的异常处理机制
 - 日志配置失败时的降级处理
 
@@ -140,11 +153,12 @@ log_path = Config.setup_logging()
 # 使用日志
 import logging
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 logger.info("这是一条日志消息")
 ```
 
 ### 自定义配置
+
 ```python
 import os
 
@@ -160,6 +174,7 @@ log_path = Config.setup_logging()
 ## 🎯 与数据库配置的一致性
 
 日志配置与数据库配置保持一致的设计模式：
+
 - 都支持环境变量自定义路径
 - 都有默认的存储目录（`logs/` 和 `db/`）
 - 都实现了自动目录创建

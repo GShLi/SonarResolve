@@ -20,7 +20,7 @@ except ImportError:
 from .core.config import Config
 from .main import SonarToJiraProcessor
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class TaskScheduler:

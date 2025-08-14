@@ -6,7 +6,6 @@ SonarQube Critical Issues to Jira Tasks
 """
 
 import argparse
-import logging
 import sys
 from datetime import datetime
 from typing import Any, Dict, List
@@ -18,9 +17,8 @@ from .core.models import SonarIssue
 from .utils.project_db import ProjectStatusDB
 
 # 配置日志（使用Config中的配置）
-Config.setup_logging()
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class SonarToJiraProcessor:
@@ -157,7 +155,8 @@ class SonarToJiraProcessor:
                 issues_by_project[project_key].append(issue)
 
             logger.info(
-                f"找到 {len(all_issues)} 个Critical问题，" f"涉及 {len(issues_by_project)} 个项目"
+                f"找到 {len(all_issues)} 个Critical问题，"
+                f"涉及 {len(issues_by_project)} 个项目"
             )
             for project_key, issues in issues_by_project.items():
                 logger.info(f"  项目 {project_key}: {len(issues)} 个问题")
@@ -182,7 +181,8 @@ class SonarToJiraProcessor:
 
             # 如果没有找到匹配的项目，创建新项目
             logger.info(
-                f"未找到匹配的Jira项目，为SonarQube项目 {sonar_project_key} " f"创建新JIRA项目..."
+                f"未找到匹配的Jira项目，为SonarQube项目 {sonar_project_key} "
+                f"创建新JIRA项目..."
             )
 
             # 生成Jira项目key（确保符合Jira规范）
@@ -193,7 +193,8 @@ class SonarToJiraProcessor:
                 key=jira_project_key,
                 name=f"{jira_project_name}",
                 description=(
-                    f"自动创建的项目，用于管理SonarQube项目 " f"{sonar_project_key} 的Critical问题"
+                    f"自动创建的项目，用于管理SonarQube项目 "
+                    f"{sonar_project_key} 的Critical问题"
                 ),
             )
 
@@ -205,7 +206,8 @@ class SonarToJiraProcessor:
                     sonar_project_key, jira_project_key
                 )
                 logger.debug(
-                    f"已记录新创建项目到数据库: " f"{sonar_project_key} -> {jira_project_key}"
+                    f"已记录新创建项目到数据库: "
+                    f"{sonar_project_key} -> {jira_project_key}"
                 )
 
                 return jira_project_key
@@ -225,7 +227,10 @@ class SonarToJiraProcessor:
             cached_jira_key = self.project_db.is_project_created(sonar_project_key)
 
             if cached_jira_key:
-                logger.info(f"从缓存中找到项目映射: " f"{sonar_project_key} -> {cached_jira_key}")
+                logger.info(
+                    f"从缓存中找到项目映射: "
+                    f"{sonar_project_key} -> {cached_jira_key}"
+                )
                 return cached_jira_key
 
             # 2. 如果缓存中没有，从Jira API查询
@@ -319,7 +324,9 @@ class SonarToJiraProcessor:
             # 2. 对每个项目处理Critical问题
             for sonar_project_key, sonar_issues in issues_by_project.items():
                 logger.info(f"\n{'=' * 60}")
-                logger.info(f"处理项目: {sonar_project_key} ({len(sonar_issues)} 个问题)")
+                logger.info(
+                    f"处理项目: {sonar_project_key} ({len(sonar_issues)} 个问题)"
+                )
                 logger.info(f"{'=' * 60}")
 
                 project_result = {
@@ -341,7 +348,8 @@ class SonarToJiraProcessor:
 
                     if not jira_project_key:
                         error_msg = (
-                            f"无法为SonarQube项目 {sonar_project_key} " f"创建或找到对应的Jira项目"
+                            f"无法为SonarQube项目 {sonar_project_key} "
+                            f"创建或找到对应的Jira项目"
                         )
                         logger.error(error_msg)
                         project_result["errors"].append(error_msg)
@@ -403,7 +411,9 @@ class SonarToJiraProcessor:
                 project_stats = self.project_db.get_project_statistics()
                 task_stats = self.project_db.get_task_statistics()
                 logger.info("批量处理完成后的数据库统计:")
-                logger.info(f"  - 已创建项目数: " f"{project_stats.get('total_projects', 0)}")
+                logger.info(
+                    f"  - 已创建项目数: " f"{project_stats.get('total_projects', 0)}"
+                )
                 logger.info(f"  - 已创建任务数: " f"{task_stats.get('total_tasks', 0)}")
                 results["db_stats"] = {
                     "projects": project_stats.get("total_projects", 0),
@@ -513,7 +523,9 @@ SonarQube Critical问题批量处理报告
         print(f"\n{'=' * 70}")
         print("📋 SonarQube到Jira批量处理完成")
         print(f"{'=' * 70}")
-        print(f"处理项目: {results['successful_projects']}/{results['total_projects']} 个成功")
+        print(
+            f"处理项目: {results['successful_projects']}/{results['total_projects']} 个成功"
+        )
         print(f"发现问题: {results['total_sonar_issues']} 个")
         print(f"创建任务: {results['total_jira_tasks_created']} 个")
         print(f"处理耗时: {results['duration']}")
@@ -613,11 +625,17 @@ def main():
         help="运行模式：jira=创建Jira任务（默认），ai-fix=AI自动修复",
     )
 
-    parser.add_argument("--project", type=str, help="指定项目Key（可选，不指定则处理所有项目）")
+    parser.add_argument(
+        "--project", type=str, help="指定项目Key（可选，不指定则处理所有项目）"
+    )
 
-    parser.add_argument("--test", action="store_true", help="仅测试连接，不执行实际操作")
+    parser.add_argument(
+        "--test", action="store_true", help="仅测试连接，不执行实际操作"
+    )
 
-    parser.add_argument("--dry-run", action="store_true", help="试运行模式，不实际创建任务或提交代码")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="试运行模式，不实际创建任务或提交代码"
+    )
 
     args = parser.parse_args()
 

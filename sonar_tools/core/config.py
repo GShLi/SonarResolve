@@ -179,7 +179,7 @@ class Config:
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
 
-        return str(log_file_path.absolute())
+        return root_logger
 
     @classmethod
     def get_log_info(cls) -> Dict[str, Any]:

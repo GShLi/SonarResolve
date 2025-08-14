@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from ..core.models import SonarIssue
 from ..utils.project_db import ProjectStatusDB
 
-logger = logging.getLogger(__name__)
+logger = Config.setup_logging(__name__)
 
 
 class SonarService:
