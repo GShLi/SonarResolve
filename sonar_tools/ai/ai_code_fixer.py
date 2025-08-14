@@ -13,6 +13,7 @@ from ..clients.sonarqube_client import SonarQubeClient
 from ..core.config import Config
 from ..core.models import SonarIssue
 from ..clients.langchain_client import LangChainClient
+from ..service.sonar_service import SonarService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ class AICodeFixer:
         self.config = Config
         self._validate_config()
         self._initialize_clients()
+        self.sonar_service = SonarService()
 
     def _validate_config(self):
         """验证配置"""
@@ -115,6 +117,19 @@ class AICodeFixer:
             # 处理每个问题，为每个问题创建独立的MR
             successful_fixes = 0
             for issue in issues:
+                # 先检查问题是否需要修复
+                fix_check_result = self.sonar_service.is_issue_need_fix(issue.key)
+
+                if not fix_check_result.get("need_fix", True):
+                    logger.info(
+                        f"跳过问题 {issue.key}: {fix_check_result.get('reason', '无需修复')}"
+                    )
+                    continue
+
+                logger.info(
+                    f"确认需要修复问题 {issue.key}: {fix_check_result.get('reason', '需要修复')}"
+                )
+
                 if self._fix_single_issue_with_mr(issue, repo_path, repo_info):
                     successful_fixes += 1
                 else:
@@ -204,6 +219,32 @@ class AICodeFixer:
             # 判断MR创建结果
             if mr_result:
                 logger.info(f"成功为问题 {issue.key} 创建MR: {mr_result['url']}")
+
+                # 创建MR记录
+                try:
+                    mr_record_success = self.sonar_service.add_issue_mr_record(
+                        sonar_issue_key=issue.key,
+                        mr_url=mr_result["url"],
+                        mr_iid=mr_result.get("iid"),
+                        mr_title=mr_info["title"],
+                        mr_description=mr_info["description"],
+                        branch_name=branch_name,
+                        source_branch=branch_name,
+                        target_branch=repo_info["default_branch"],
+                        mr_status="created",
+                    )
+
+                    if mr_record_success:
+                        logger.info(
+                            f"成功创建MR记录: {issue.key} -> {mr_result['url']}"
+                        )
+                    else:
+                        logger.warning(f"MR记录创建失败，但MR已成功创建: {issue.key}")
+
+                except Exception as record_error:
+                    logger.error(f"创建MR记录时发生异常: {record_error}")
+                    # 不影响主流程，MR已经创建成功
+
                 return True
             else:
                 logger.error(f"创建MR失败: {issue.key}")
