@@ -4,6 +4,6 @@
 提供业务逻辑服务
 """
 
-from .sonar_service import SonarService
+from sonar_tools.service.sonar_service import SonarService
 
 __all__ = ["SonarService"]

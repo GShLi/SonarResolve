@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from .config import Config
+from sonar_tools.core.config import Config
 
 
 @dataclass

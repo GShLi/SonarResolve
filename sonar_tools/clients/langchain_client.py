@@ -96,7 +96,7 @@ class LangChainClient:
         Returns:
             分析结果字典，包含问题分析和范围信息
         """
-        from ..ai.prompts import PromptTemplates
+        from sonar_tools.ai.prompts import PromptTemplates
 
         try:
             # 构建分析提示词
@@ -272,7 +272,7 @@ class LangChainClient:
         Returns:
             修复结果字典
         """
-        from ..ai.prompts import PromptTemplates
+        from sonar_tools.ai.prompts import PromptTemplates
 
         try:
             # 构建修复提示词
@@ -340,7 +340,7 @@ class LangChainClient:
         Returns:
             验证结果字典
         """
-        from ..ai.prompts import PromptTemplates
+        from sonar_tools.ai.prompts import PromptTemplates
 
         try:
             # 构建验证提示词
@@ -389,7 +389,7 @@ class LangChainClient:
         Returns:
             应用结果字典，包含修改后的文件内容
         """
-        from ..ai.prompts import PromptTemplates
+        from sonar_tools.ai.prompts import PromptTemplates
 
         try:
             # 构建代码应用提示词
@@ -462,7 +462,7 @@ class LangChainClient:
         Returns:
             提交信息字典
         """
-        from ..ai.prompts import PromptTemplates
+        from sonar_tools.ai.prompts import PromptTemplates
 
         try:
             # 构建提交信息生成提示词

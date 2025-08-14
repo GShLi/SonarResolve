@@ -16,10 +16,10 @@ try:
 except ImportError:
     croniter = None
 
-from .ai.ai_code_fixer import AICodeFixer
-from .core.config import Config
-from .main import SonarToJiraProcessor
-from .service.mr_sync_service import MRStatusSyncService
+from sonar_tools.ai.ai_code_fixer import AICodeFixer
+from sonar_tools.core.config import Config
+from sonar_tools.main import SonarToJiraProcessor
+from sonar_tools.service.mr_sync_service import MRStatusSyncService
 
 logger = Config.setup_logging(__name__)
 

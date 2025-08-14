@@ -7,9 +7,9 @@ MR状态同步服务
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from ..clients.git_client import GitLabClient
-from ..core.config import Config
-from ..utils.project_db import ProjectStatusDB
+from sonar_tools.clients.git_client import GitLabClient
+from sonar_tools.core.config import Config
+from sonar_tools.utils.project_db import ProjectStatusDB
 
 logger = Config.setup_logging(__name__)
 
