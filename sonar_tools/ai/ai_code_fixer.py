@@ -7,11 +7,12 @@ import time
 from pathlib import Path
 from typing import Dict, List
 
+from sonar_tools.core.config import Config
+from sonar_tools.core.models import SonarIssue
+
 from ..clients.git_client import GitClient, GitLabClient
 from ..clients.langchain_client import LangChainClient
 from ..clients.sonarqube_client import SonarQubeClient
-from sonar_tools.core.config import Config
-from sonar_tools.core.models import SonarIssue
 from ..service.sonar_service import SonarService
 
 logger = Config.setup_logging(__name__)
@@ -237,9 +238,7 @@ class AICodeFixer:
                     )
 
                     if mr_record_success:
-                        logger.info(
-                            f"成功创建MR记录: {issue.key} -> {mr_result['url']}"
-                        )
+                        logger.info(f"成功创建MR记录: {issue.key} -> {mr_result['url']}")
                     else:
                         logger.warning(f"MR记录创建失败，但MR已成功创建: {issue.key}")
 
@@ -725,9 +724,7 @@ class AICodeFixer:
 
             # 验证行号范围
             if start_line < 1 or end_line > len(lines) or start_line > end_line:
-                logger.error(
-                    f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)"
-                )
+                logger.error(f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)")
                 return False
 
             # 构建新的文件内容
@@ -855,9 +852,7 @@ class AICodeFixer:
 
                     return True
                 else:
-                    logger.warning(
-                        f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法"
-                    )
+                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
                     return False
             else:
                 logger.debug(

@@ -9,6 +9,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from sonar_tools.core.config import Config
 
 logger = Config.setup_logging(__name__)
@@ -544,8 +545,8 @@ class ProjectStatusDB:
                         SELECT id, sonar_issue_key, mr_url, mr_id, git_project_id, mr_title, mr_description,
                                branch_name, source_branch, target_branch, mr_status,
                                rejection_reason, submitted_time, updated_time, is_latest
-                        FROM mr_records 
-                        WHERE mr_status IN ('created', 'opened') 
+                        FROM mr_records
+                        WHERE mr_status IN ('created', 'opened')
                         AND datetime(submitted_time) >= datetime('now', '-{} days')
                         ORDER BY submitted_time DESC
                     """.format(

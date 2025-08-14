@@ -501,7 +501,7 @@ class LangChainClient:
                 "commit": {
                     "type": "fix",
                     "scope": "sonar",
-                    "subject": f"修复SonarQube问题",
+                    "subject": "修复SonarQube问题",
                     "body": "SonarQube Critical问题自动修复",
                     "footer": "",
                 },

@@ -6,9 +6,9 @@ SonarQube业务服务
 
 from typing import Any, Dict, List, Optional
 
+from sonar_tools.core.config import Config
 from sonar_tools.core.models import SonarIssue
 from sonar_tools.utils.project_db import ProjectStatusDB
-from sonar_tools.core.config import Config
 
 logger = Config.setup_logging(__name__)
 

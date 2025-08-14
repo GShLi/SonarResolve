@@ -4,7 +4,6 @@
 使用cron表达式定时执行SonarQube到Jira的任务创建
 """
 
-import logging
 import signal
 import sys
 import threading
@@ -17,10 +16,10 @@ try:
 except ImportError:
     croniter = None
 
+from .ai.ai_code_fixer import AICodeFixer
 from .core.config import Config
 from .main import SonarToJiraProcessor
 from .service.mr_sync_service import MRStatusSyncService
-from .ai.ai_code_fixer import AICodeFixer
 
 logger = Config.setup_logging(__name__)
 

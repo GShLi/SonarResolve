@@ -4,9 +4,8 @@ MR状态同步服务
 定时从GitLab同步MR状态并更新数据库
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from ..clients.git_client import GitLabClient
 from ..core.config import Config

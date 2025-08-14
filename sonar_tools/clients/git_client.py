@@ -200,7 +200,7 @@ class GitClient:
                 f"执行GitPython clone --branch {default_branch} [URL] {local_path}"
             )
 
-            repo = Repo.clone_from(
+            Repo.clone_from(
                 url=clone_url,
                 to_path=str(local_path),
                 branch=default_branch,
@@ -736,7 +736,7 @@ class GitLabClient:
                 return None
 
             # 提取项目路径
-            relative_path = mr_url[len(gitlab_base) :]
+            relative_path = mr_url[len(gitlab_base):]
             project_path = relative_path.split("/-/merge_requests/")[0]
 
             # 获取项目和MR
