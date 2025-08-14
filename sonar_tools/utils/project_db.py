@@ -238,7 +238,7 @@ class ProjectStatusDB:
             sonar_issue_key: SonarQube问题Key
 
         Returns:
-            True表示问题已创建，False表示未创建
+            True表示问题已创建且有完整的Jira信息，False表示未创建或Jira信息不完整
         """
         try:
             with self.lock:
@@ -248,7 +248,9 @@ class ProjectStatusDB:
                     cursor.execute(
                         """
                         SELECT id FROM sonar_issue 
-                        WHERE sonar_issue_key = ?
+                        WHERE sonar_issue_key = ? 
+                        AND jira_task_key IS NOT NULL 
+                        AND jira_project_key IS NOT NULL
                     """,
                         (sonar_issue_key,),
                     )
@@ -303,6 +305,90 @@ class ProjectStatusDB:
 
         except Exception as e:
             logger.error(f"记录问题创建失败: {e}")
+
+    def update_task_jira_info(
+        self,
+        sonar_issue_key: str,
+        jira_task_key: str,
+        jira_project_key: str,
+    ) -> bool:
+        """
+        更新SonarQube问题的Jira信息
+
+        Args:
+            sonar_issue_key: SonarQube问题Key
+            jira_task_key: Jira任务Key
+            jira_project_key: Jira项目Key
+
+        Returns:
+            True表示更新成功，False表示失败
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        UPDATE sonar_issue 
+                        SET jira_task_key = ?, jira_project_key = ?, updated_time = CURRENT_TIMESTAMP
+                        WHERE sonar_issue_key = ?
+                    """,
+                        (jira_task_key, jira_project_key, sonar_issue_key),
+                    )
+
+                    conn.commit()
+                    if cursor.rowcount > 0:
+                        logger.debug(f"更新问题Jira信息: {sonar_issue_key} -> {jira_task_key}")
+                        return True
+                    else:
+                        logger.warning(f"未找到需要更新的问题记录: {sonar_issue_key}")
+                        return False
+
+        except Exception as e:
+            logger.error(f"更新问题Jira信息失败: {e}")
+            return False
+
+    def get_task_basic_info(self, sonar_issue_key: str) -> Optional[Dict[str, Any]]:
+        """
+        获取任务的基本信息
+
+        Args:
+            sonar_issue_key: SonarQube问题Key
+
+        Returns:
+            任务基本信息，如果不存在返回None
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        SELECT sonar_issue_key, jira_task_key, jira_project_key, sonar_project_key,
+                               created_time, updated_time
+                        FROM sonar_issue 
+                        WHERE sonar_issue_key = ?
+                    """,
+                        (sonar_issue_key,),
+                    )
+
+                    row = cursor.fetchone()
+                    if row:
+                        return {
+                            "sonar_issue_key": row[0],
+                            "jira_task_key": row[1],
+                            "jira_project_key": row[2],
+                            "sonar_project_key": row[3],
+                            "created_time": row[4],
+                            "updated_time": row[5],
+                        }
+                    return None
+
+        except Exception as e:
+            logger.error(f"获取任务基本信息失败: {e}")
+            return None
 
     def create_mr_record(
         self,

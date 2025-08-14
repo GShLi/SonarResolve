@@ -31,9 +31,6 @@ class SonarService:
         sonar_issue: SonarIssue,
         jira_task_key: str,
         jira_project_key: str,
-        fix_status: str = "pending",
-        mr_status: str = "pending",
-        mr_url: str = None,
     ) -> bool:
         """
         创建SonarQube问题记录
@@ -42,14 +39,35 @@ class SonarService:
             sonar_issue: SonarQube问题对象
             jira_task_key: Jira任务Key
             jira_project_key: Jira项目Key
-            fix_status: 修复状态 (pending, in_progress, fixed, failed) - 暂不使用
-            mr_status: MR状态 (pending, created, merged, closed) - 暂不使用
-            mr_url: MR地址 - 暂不使用
 
         Returns:
             bool: 创建成功返回True，失败返回False
         """
         try:
+            existing_record = self.project_db.get_task_basic_info(sonar_issue.key)
+
+            if existing_record:
+                # 如果已有记录但缺少Jira信息，则更新
+                if not existing_record.get("jira_task_key") and not existing_record.get(
+                    "jira_project_key"
+                ):
+                    success = self.project_db.update_task_jira_info(
+                        sonar_issue_key=sonar_issue.key,
+                        jira_task_key=jira_task_key,
+                        jira_project_key=jira_project_key,
+                    )
+                    if success:
+                        logger.info(
+                            f"更新SonarQube问题Jira信息: {sonar_issue.key} -> {jira_task_key}"
+                        )
+                        return True
+                else:
+                    # 已有完整记录，直接返回成功
+                    logger.info(
+                        f"SonarQube问题记录已存在: {sonar_issue.key} -> {existing_record.get('jira_task_key')}"
+                    )
+                    return True
+            # 如果没有记录或更新失败，创建新记录
             self.project_db.record_created_task(
                 sonar_issue_key=sonar_issue.key,
                 jira_task_key=jira_task_key,

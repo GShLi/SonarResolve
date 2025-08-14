@@ -6,6 +6,7 @@ from jira import JIRA
 
 from sonar_tools.core.config import Config
 from sonar_tools.core.models import JiraTask, SonarIssue
+from sonar_tools.service.sonar_service import SonarService
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,9 @@ logger = logging.getLogger(__name__)
 class JiraClient:
     """Jira API客户端"""
 
-    def __init__(self, server: str, token: str, project_db=None):
+    def __init__(self, server: str, token: str):
         self.server = server
-        self.project_db = project_db  # ProjectStatusDB实例，用于缓存查询
+        self.sonar_service = SonarService()
         try:
             self.jira = JIRA(
                 server=server,
@@ -78,8 +79,12 @@ class JiraClient:
         for i, sonar_issue in enumerate(sonar_issues, 1):
             # 检查是否达到任务创建限制
             if max_tasks > 0 and len(created_issues) >= max_tasks:
-                logger.warning(f"已达到单次创建任务限制 ({max_tasks} 个)，停止创建更多任务")
-                logger.info(f"剩余 {len(sonar_issues) - i + 1} 个问题将在下次运行时处理")
+                logger.warning(
+                    f"已达到单次创建任务限制 ({max_tasks} 个)，停止创建更多任务"
+                )
+                logger.info(
+                    f"剩余 {len(sonar_issues) - i + 1} 个问题将在下次运行时处理"
+                )
                 break
 
             logger.info(f"创建第 {i}/{len(sonar_issues)} 个Jira任务...")
@@ -97,15 +102,16 @@ class JiraClient:
                 created_issues.append(issue_key)
 
                 # 将新创建的任务记录到SQLite缓存
-                if self.project_db:
+                if self.sonar_service:
                     try:
-                        self.project_db.record_created_task(
-                            sonar_issue_key=sonar_issue.key,
+                        self.sonar_service.create_sonar_issue_record(
+                            sonar_issue=sonar_issue,
                             jira_task_key=issue_key,
                             jira_project_key=project_key,
-                            sonar_project_key=sonar_issue.project,
                         )
-                        logger.debug(f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}")
+                        logger.debug(
+                            f"已记录新创建任务到缓存: {sonar_issue.key} -> {issue_key}"
+                        )
                     except Exception as e:
                         logger.warning(f"记录新创建任务到缓存失败: {e}")
 
@@ -201,9 +207,9 @@ class JiraClient:
         """检查是否已存在相同的Jira任务（优先从SQLite缓存查询）"""
         try:
             # 1. 首先从SQLite缓存中查询任务是否已创建
-            if self.project_db:
+            if self.sonar_service:
                 logger.debug(f"从缓存中查询任务 {sonar_issue.key} 是否已创建...")
-                if self.project_db.is_task_created(sonar_issue.key):
+                if self.sonar_service.is_issue_jira_task_created(sonar_issue.key):
                     logger.info(f"从缓存中发现任务已存在: {sonar_issue.key}")
                     return True
                 logger.debug(f"缓存中未找到任务 {sonar_issue.key}，将查询Jira API...")
@@ -227,23 +233,21 @@ class JiraClient:
                 if sonar_issue.key in description or sonar_issue.key in summary:
                     task_exists = True
                     existing_task = issue
-                    logger.debug(f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}")
+                    logger.debug(
+                        f"在任务 {issue.key} 中找到SonarQube问题 {sonar_issue.key}"
+                    )
                     break
 
             if task_exists:
                 logger.info(f"Jira API查询发现任务已存在: {sonar_issue.key}")
 
                 # 如果从Jira API发现任务存在，但缓存中没有记录，补充记录到缓存
-                if self.project_db and existing_task:
+                if self.sonar_service and existing_task:
                     try:
-                        # 找到SonarQube项目key（从任务所属项目推断）
-                        sonar_project_key = sonar_issue.project
-
-                        self.project_db.record_created_task(
-                            sonar_issue_key=sonar_issue.key,
+                        self.sonar_service.create_sonar_issue_record(
+                            sonar_issue=sonar_issue,
                             jira_task_key=existing_task.key,
                             jira_project_key=project_key,
-                            sonar_project_key=sonar_project_key,
                         )
                         logger.debug(
                             f"已补充任务记录到缓存: {sonar_issue.key} -> {existing_task.key}"
