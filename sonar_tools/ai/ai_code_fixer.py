@@ -7,12 +7,11 @@ import time
 from pathlib import Path
 from typing import Dict, List
 
-from sonar_tools.core.config import Config
-from sonar_tools.core.models import SonarIssue
-
 from sonar_tools.clients.git_client import GitClient, GitLabClient
 from sonar_tools.clients.langchain_client import LangChainClient
 from sonar_tools.clients.sonarqube_client import SonarQubeClient
+from sonar_tools.core.config import Config
+from sonar_tools.core.models import SonarIssue
 from sonar_tools.service.sonar_service import SonarService
 
 logger = Config.setup_logging(__name__)
@@ -238,9 +237,7 @@ class AICodeFixer:
                     )
 
                     if mr_record_success:
-                        logger.info(
-                            f"成功创建MR记录: {issue.key} -> {mr_result['url']}"
-                        )
+                        logger.info(f"成功创建MR记录: {issue.key} -> {mr_result['url']}")
                     else:
                         logger.warning(f"MR记录创建失败，但MR已成功创建: {issue.key}")
 
@@ -726,9 +723,7 @@ class AICodeFixer:
 
             # 验证行号范围
             if start_line < 1 or end_line > len(lines) or start_line > end_line:
-                logger.error(
-                    f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)"
-                )
+                logger.error(f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)")
                 return False
 
             # 构建新的文件内容
@@ -831,57 +826,61 @@ class AICodeFixer:
         try:
             # 获取当前文件的完整内容用于AI分析
             file_content = "".join(lines)
-            
+
             # 准备AI分析的数据
             analysis_data = {
                 "file_content": file_content,
                 "new_imports": imports_code,
                 "function_start_line": function_start_line,
-                "total_lines": len(lines)
+                "total_lines": len(lines),
             }
-            
+
             # 调用AI分析导入插入
             try:
                 import_analysis = self.ai_client.analyze_import_insertion(analysis_data)
-                
+
                 if not import_analysis.get("success"):
                     logger.warning(f"AI导入分析失败: {import_analysis.get('error')}")
-                    return self._fallback_import_handling(lines, imports_code, function_start_line)
-                    
+                    return self._fallback_import_handling(
+                        lines, imports_code, function_start_line
+                    )
+
                 # 解析AI的分析结果
                 insert_position = import_analysis.get("insert_position", 0)
                 imports_to_add = import_analysis.get("imports_to_add", [])
                 duplicate_imports = import_analysis.get("duplicate_imports", [])
-                
+
                 if not imports_to_add:
                     # 所有导入都已存在
                     return {
                         "success": True,
                         "needs_insertion": False,
                         "inserted_count": 0,
-                        "skipped_count": len(duplicate_imports)
+                        "skipped_count": len(duplicate_imports),
                     }
-                
+
                 # 验证插入位置的合理性
                 if insert_position < 0 or insert_position > len(lines):
                     logger.warning(f"AI提供的插入位置无效: {insert_position}")
-                    return self._fallback_import_handling(lines, imports_code, function_start_line)
-                
+                    return self._fallback_import_handling(
+                        lines, imports_code, function_start_line
+                    )
+
                 # 插入新的导入语句
                 updated_lines = lines.copy()
                 line_offset = 0
-                
+
                 for i, import_stmt in enumerate(imports_to_add):
                     insert_pos = insert_position + i
-                    if not import_stmt.endswith('\n'):
-                        import_stmt += '\n'
+                    if not import_stmt.endswith("\n"):
+                        import_stmt += "\n"
                     updated_lines.insert(insert_pos, import_stmt)
                     line_offset += 1
-                
+
                 logger.info(f"AI分析完成: 在第{insert_position+1}行插入{len(imports_to_add)}个导入")
                 if duplicate_imports:
                     logger.info(f"跳过重复导入: {duplicate_imports}")
-                
+
                 return {
                     "success": True,
                     "needs_insertion": True,
@@ -889,13 +888,15 @@ class AICodeFixer:
                     "line_offset": line_offset,
                     "inserted_count": len(imports_to_add),
                     "skipped_count": len(duplicate_imports),
-                    "insert_position": insert_position
+                    "insert_position": insert_position,
                 }
-                
+
             except Exception as ai_error:
                 logger.debug(f"AI导入分析异常: {ai_error}")
-                return self._fallback_import_handling(lines, imports_code, function_start_line)
-                
+                return self._fallback_import_handling(
+                    lines, imports_code, function_start_line
+                )
+
         except Exception as e:
             logger.error(f"智能导入处理失败: {e}")
             return {"success": False, "error": str(e)}
@@ -906,49 +907,49 @@ class AICodeFixer:
         """备用的导入处理方法（当AI分析失败时使用）"""
         try:
             logger.info("使用备用导入处理方法")
-            
+
             # 解析导入语句
             import_statements = self._parse_import_statements(imports_code)
             if not import_statements:
                 return {"success": False, "error": "无法解析导入语句"}
-            
+
             # 检查现有导入
             existing_imports = self._extract_existing_imports(lines)
-            
+
             # 过滤重复导入
             new_imports = []
             skipped_imports = []
-            
+
             for import_stmt in import_statements:
                 if self._is_import_duplicate(import_stmt, existing_imports):
                     skipped_imports.append(import_stmt)
                 else:
                     new_imports.append(import_stmt)
-            
+
             if not new_imports:
                 return {
                     "success": True,
                     "needs_insertion": False,
                     "inserted_count": 0,
-                    "skipped_count": len(skipped_imports)
+                    "skipped_count": len(skipped_imports),
                 }
-            
+
             # 找到插入位置
             insert_position = self._find_import_insert_position(lines)
             if insert_position is None:
                 insert_position = 0
-            
+
             # 确保插入位置在函数开始之前
             if insert_position >= function_start_line:
                 insert_position = max(0, function_start_line - 1)
-            
+
             # 插入新导入
             updated_lines = lines.copy()
             for i, import_stmt in enumerate(new_imports):
-                if not import_stmt.endswith('\n'):
-                    import_stmt += '\n'
+                if not import_stmt.endswith("\n"):
+                    import_stmt += "\n"
                 updated_lines.insert(insert_position + i, import_stmt)
-            
+
             return {
                 "success": True,
                 "needs_insertion": True,
@@ -956,9 +957,9 @@ class AICodeFixer:
                 "line_offset": len(new_imports),
                 "inserted_count": len(new_imports),
                 "skipped_count": len(skipped_imports),
-                "insert_position": insert_position
+                "insert_position": insert_position,
             }
-            
+
         except Exception as e:
             logger.error(f"备用导入处理失败: {e}")
             return {"success": False, "error": str(e)}
@@ -967,10 +968,10 @@ class AICodeFixer:
         """解析导入代码块，提取个别导入语句"""
         try:
             statements = []
-            for line in imports_code.strip().split('\n'):
+            for line in imports_code.strip().split("\n"):
                 line = line.strip()
-                if line and not line.startswith('#'):
-                    if line.startswith(('import ', 'from ')):
+                if line and not line.startswith("#"):
+                    if line.startswith(("import ", "from ")):
                         statements.append(line)
             return statements
         except Exception as e:
@@ -983,9 +984,9 @@ class AICodeFixer:
             existing_imports = []
             for line in lines:
                 stripped = line.strip()
-                if stripped.startswith(('import ', 'from ')):
+                if stripped.startswith(("import ", "from ")):
                     existing_imports.append(stripped)
-                elif stripped and not stripped.startswith('#'):
+                elif stripped and not stripped.startswith("#"):
                     # 遇到非注释的实际代码，停止搜索
                     break
             return existing_imports
@@ -997,38 +998,43 @@ class AICodeFixer:
         """检查导入是否重复"""
         try:
             new_import = new_import.strip()
-            
+
             # 精确匹配
             if new_import in existing_imports:
                 return True
-            
+
             # 解析导入类型和模块
-            if new_import.startswith('from '):
+            if new_import.startswith("from "):
                 # from module import name1, name2
-                parts = new_import.split(' import ')
+                parts = new_import.split(" import ")
                 if len(parts) == 2:
-                    module = parts[0].replace('from ', '').strip()
-                    imports = [item.strip() for item in parts[1].split(',')]
-                    
+                    module = parts[0].replace("from ", "").strip()
+                    imports = [item.strip() for item in parts[1].split(",")]
+
                     # 检查是否有相同模块的导入
                     for existing in existing_imports:
-                        if existing.startswith(f'from {module} import '):
-                            existing_imports_part = existing.split(' import ')[1]
-                            existing_items = [item.strip() for item in existing_imports_part.split(',')]
-                            
+                        if existing.startswith(f"from {module} import "):
+                            existing_imports_part = existing.split(" import ")[1]
+                            existing_items = [
+                                item.strip()
+                                for item in existing_imports_part.split(",")
+                            ]
+
                             # 检查是否所有要导入的项目都已存在
                             if all(item in existing_items for item in imports):
                                 return True
-                            
-            elif new_import.startswith('import '):
+
+            elif new_import.startswith("import "):
                 # import module
-                module = new_import.replace('import ', '').strip()
+                module = new_import.replace("import ", "").strip()
                 for existing in existing_imports:
-                    if existing == f'import {module}' or existing.startswith(f'import {module},'):
+                    if existing == f"import {module}" or existing.startswith(
+                        f"import {module},"
+                    ):
                         return True
-            
+
             return False
-            
+
         except Exception as e:
             logger.debug(f"检查导入重复失败: {e}")
             return False
@@ -1078,9 +1084,7 @@ class AICodeFixer:
 
                     return True
                 else:
-                    logger.warning(
-                        f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法"
-                    )
+                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
                     return False
             else:
                 logger.debug(

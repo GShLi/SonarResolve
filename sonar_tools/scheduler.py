@@ -92,29 +92,21 @@ class TaskScheduler:
             logger.info(f"    - Cron表达式: {self.main_task_cron}")
             next_run = self._get_next_run_time(self.main_task_cron)
             if next_run:
-                logger.info(
-                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
+                logger.info(f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
 
         logger.info(f"  - MR同步任务状态: {'启用' if self.mr_sync_enabled else '禁用'}")
         if self.mr_sync_enabled:
             logger.info(f"    - Cron表达式: {self.mr_sync_cron}")
             next_run = self._get_next_run_time(self.mr_sync_cron)
             if next_run:
-                logger.info(
-                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
+                logger.info(f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        logger.info(
-            f"  - AI代码修复任务状态: {'启用' if self.ai_fixer_enabled else '禁用'}"
-        )
+        logger.info(f"  - AI代码修复任务状态: {'启用' if self.ai_fixer_enabled else '禁用'}")
         if self.ai_fixer_enabled:
             logger.info(f"    - Cron表达式: {self.ai_fixer_cron}")
             next_run = self._get_next_run_time(self.ai_fixer_cron)
             if next_run:
-                logger.info(
-                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
+                logger.info(f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
 
         logger.info(f"  - 时区设置: {self.timezone}")
 
@@ -170,9 +162,7 @@ class TaskScheduler:
 
             # 记录任务统计信息
             if "total_jira_tasks_created" in task_results:
-                logger.info(
-                    f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个"
-                )
+                logger.info(f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个")
 
         except Exception as e:
             result["error"] = str(e)
@@ -319,9 +309,7 @@ class TaskScheduler:
                 sleep_seconds = (next_run - current_time).total_seconds()
 
                 if sleep_seconds > 0:
-                    logger.debug(
-                        f"任务 [{task_name}] 距离下次执行还有 {sleep_seconds:.0f} 秒"
-                    )
+                    logger.debug(f"任务 [{task_name}] 距离下次执行还有 {sleep_seconds:.0f} 秒")
 
                     # 使用事件等待，支持提前中断
                     if self.stop_event.wait(sleep_seconds):
@@ -560,9 +548,7 @@ def main():
                                 )
 
                         if task_info:
-                            logger.debug(
-                                f"调度器运行中，下次执行时间 - {', '.join(task_info)}"
-                            )
+                            logger.debug(f"调度器运行中，下次执行时间 - {', '.join(task_info)}")
 
                 except KeyboardInterrupt:
                     break

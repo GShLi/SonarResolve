@@ -227,9 +227,7 @@ class ProjectStatusDB:
                     )
 
                     conn.commit()
-                    logger.info(
-                        f"记录已创建项目: {sonar_project_key} -> {jira_project_key}"
-                    )
+                    logger.info(f"记录已创建项目: {sonar_project_key} -> {jira_project_key}")
 
         except Exception as e:
             logger.error(f"记录项目创建失败: {e}")
@@ -303,13 +301,9 @@ class ProjectStatusDB:
 
                     conn.commit()
                     if jira_task_key:
-                        logger.debug(
-                            f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}"
-                        )
+                        logger.debug(f"记录已创建问题: {sonar_issue_key} -> {jira_task_key}")
                     else:
-                        logger.debug(
-                            f"创建问题记录: {sonar_issue_key} (Jira任务待创建)"
-                        )
+                        logger.debug(f"创建问题记录: {sonar_issue_key} (Jira任务待创建)")
 
         except Exception as e:
             logger.error(f"记录问题创建失败: {e}")

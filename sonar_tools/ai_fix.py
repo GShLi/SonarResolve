@@ -32,21 +32,13 @@ def main():
         """,
     )
 
-    parser.add_argument(
-        "--project", type=str, help="指定项目Key（可选，不指定则处理所有项目）"
-    )
+    parser.add_argument("--project", type=str, help="指定项目Key（可选，不指定则处理所有项目）")
 
-    parser.add_argument(
-        "--test", action="store_true", help="仅测试连接，不执行实际操作"
-    )
+    parser.add_argument("--test", action="store_true", help="仅测试连接，不执行实际操作")
 
-    parser.add_argument(
-        "--dry-run", action="store_true", help="试运行模式，分析问题但不实际修复"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="试运行模式，分析问题但不实际修复")
 
-    parser.add_argument(
-        "--max-issues", type=int, default=10, help="单次处理的最大问题数量（默认10个）"
-    )
+    parser.add_argument("--max-issues", type=int, default=10, help="单次处理的最大问题数量（默认10个）")
 
     args = parser.parse_args()
 

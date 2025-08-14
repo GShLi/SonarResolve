@@ -145,9 +145,7 @@ class GitClient:
                 logger.info(f"本地仓库已存在，执行git pull: {local_repo_path}")
                 return self._git_pull(local_repo_path, repo_info["default_branch"])
             else:
-                logger.info(
-                    f"克隆仓库到本地: {repo_info['full_path']} -> {local_repo_path}"
-                )
+                logger.info(f"克隆仓库到本地: {repo_info['full_path']} -> {local_repo_path}")
                 return self._git_clone(
                     clone_url, local_repo_path, repo_info["default_branch"]
                 )
@@ -259,9 +257,7 @@ class GitClient:
                             return False, None
 
                 except Exception as e:
-                    logger.warning(
-                        f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}"
-                    )
+                    logger.warning(f"切换分支失败，继续在当前分支: {current_branch}, 错误: {e}")
 
             # 执行git pull
             logger.info(f"执行git pull: {repo_path}")
@@ -301,9 +297,7 @@ class GitClient:
                     # 执行merge
                     try:
                         repo.git.merge(tracking_branch)
-                        logger.info(
-                            f"Git pull成功，合并了 {len(commits_behind)} 个提交"
-                        )
+                        logger.info(f"Git pull成功，合并了 {len(commits_behind)} 个提交")
                         return True, repo_path
                     except git.exc.GitCommandError as e:
                         logger.error(f"Git merge失败: {e}")
@@ -736,7 +730,7 @@ class GitLabClient:
                 return None
 
             # 提取项目路径
-            relative_path = mr_url[len(gitlab_base):]
+            relative_path = mr_url[len(gitlab_base) :]
             project_path = relative_path.split("/-/merge_requests/")[0]
 
             # 获取项目和MR
@@ -802,9 +796,7 @@ class GitLabClient:
             except Exception as e:
                 logger.error(f"获取MR状态异常 {mr_url}: {e}")
 
-        logger.info(
-            f"批量获取MR状态完成，成功获取 {len(results)}/{len(mr_data_list)} 个"
-        )
+        logger.info(f"批量获取MR状态完成，成功获取 {len(results)}/{len(mr_data_list)} 个")
         return results
 
     def batch_get_merge_request_status(

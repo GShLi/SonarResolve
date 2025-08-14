@@ -121,23 +121,19 @@ class MRStatusSyncService:
                     if new_status == "closed":
                         merge_status = gitlab_mr_data.get("merge_status")
                         if merge_status and merge_status.lower() != "can_be_merged":
-                            update_data["rejection_reason"] = (
-                                f"MR被关闭，合并状态: {merge_status}"
-                            )
+                            update_data[
+                                "rejection_reason"
+                            ] = f"MR被关闭，合并状态: {merge_status}"
 
                     mr_updates.append(update_data)
                     updated_count += 1
 
-                    logger.debug(
-                        f"MR状态变更: {mr_url} {current_status} -> {new_status}"
-                    )
+                    logger.debug(f"MR状态变更: {mr_url} {current_status} -> {new_status}")
 
             # 批量更新数据库
             if mr_updates:
                 actual_updated = self.project_db.batch_update_mr_status(mr_updates)
-                logger.info(
-                    f"数据库更新完成，预期更新 {len(mr_updates)} 条，实际更新 {actual_updated} 条"
-                )
+                logger.info(f"数据库更新完成，预期更新 {len(mr_updates)} 条，实际更新 {actual_updated} 条")
             else:
                 logger.info("没有MR状态需要更新")
 
