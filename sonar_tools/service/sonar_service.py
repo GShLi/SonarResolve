@@ -256,30 +256,6 @@ class SonarService:
                 "action_required": "检查系统状态并重试",
             }
 
-    def update_issue_fix_status(self, sonar_issue_key: str, fix_status: str) -> bool:
-        """
-        更新问题修复状态
-
-        Args:
-            sonar_issue_key: SonarQube问题Key
-            fix_status: 修复状态 (pending, in_progress, fixed, failed)
-
-        Returns:
-            bool: 更新成功返回True，失败返回False
-        """
-        try:
-            if hasattr(self.project_db, "update_fix_status"):
-                self.project_db.update_fix_status(sonar_issue_key, fix_status)
-                logger.info(f"更新问题修复状态: {sonar_issue_key} -> {fix_status}")
-                return True
-            else:
-                logger.warning("数据库不支持修复状态更新功能")
-                return False
-
-        except Exception as e:
-            logger.error(f"更新问题修复状态失败: {e}")
-            return False
-
     def update_mr_status(
         self, sonar_issue_key: str, mr_status: str, mr_url: str = None
     ) -> bool:
