@@ -19,12 +19,13 @@ except ImportError:
 
 from .core.config import Config
 from .main import SonarToJiraProcessor
+from .service.mr_sync_service import MRStatusSyncService
 
 logger = Config.setup_logging(__name__)
 
 
 class TaskScheduler:
-    """任务调度器"""
+    """多任务调度器"""
 
     def __init__(self):
         """初始化调度器"""
@@ -35,60 +36,91 @@ class TaskScheduler:
         # 设置日志
         Config.setup_logging()
 
-        self.cron_expression = Config.SCHEDULER_CRON_EXPRESSION
+        # 主任务配置
+        self.main_task_enabled = Config.SCHEDULER_ENABLED
+        self.main_task_cron = Config.SCHEDULER_CRON_EXPRESSION
+
+        # MR同步任务配置
+        self.mr_sync_enabled = Config.MR_SYNC_ENABLED
+        self.mr_sync_cron = Config.MR_SYNC_CRON_EXPRESSION
+
         self.timezone = Config.SCHEDULER_TIMEZONE
-        self.enabled = Config.SCHEDULER_ENABLED
 
         self.running = False
-        self.scheduler_thread: Optional[threading.Thread] = None
+        self.scheduler_threads: Dict[str, threading.Thread] = {}
         self.stop_event = threading.Event()
 
         # 任务统计
-        self.total_runs = 0
-        self.successful_runs = 0
-        self.failed_runs = 0
+        self.task_stats = {
+            "main_task": {
+                "total_runs": 0,
+                "successful_runs": 0,
+                "failed_runs": 0,
+                "last_run": None,
+                "next_run": None,
+            },
+            "mr_sync": {
+                "total_runs": 0,
+                "successful_runs": 0,
+                "failed_runs": 0,
+                "last_run": None,
+                "next_run": None,
+            },
+        }
+
         self.start_time = None
 
-        logger.info("任务调度器初始化完成")
+        logger.info("多任务调度器初始化完成")
         self._log_scheduler_config()
 
     def _log_scheduler_config(self):
         """记录调度器配置信息"""
         logger.info("调度器配置信息:")
-        logger.info(f"  - 调度器状态: {'启用' if self.enabled else '禁用'}")
-        logger.info(f"  - Cron表达式: {self.cron_expression}")
+        logger.info(f"  - 主任务状态: {'启用' if self.main_task_enabled else '禁用'}")
+        if self.main_task_enabled:
+            logger.info(f"    - Cron表达式: {self.main_task_cron}")
+            next_run = self._get_next_run_time(self.main_task_cron)
+            if next_run:
+                logger.info(
+                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+
+        logger.info(f"  - MR同步任务状态: {'启用' if self.mr_sync_enabled else '禁用'}")
+        if self.mr_sync_enabled:
+            logger.info(f"    - Cron表达式: {self.mr_sync_cron}")
+            next_run = self._get_next_run_time(self.mr_sync_cron)
+            if next_run:
+                logger.info(
+                    f"    - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+
         logger.info(f"  - 时区设置: {self.timezone}")
 
-        if self.enabled:
-            # 计算下次执行时间
-            next_run = self._get_next_run_time()
-            if next_run:
-                logger.info(f"  - 下次执行时间: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    def _validate_cron_expression(self) -> bool:
+    def _validate_cron_expression(self, cron_expr: str) -> bool:
         """验证cron表达式格式"""
         try:
-            croniter(self.cron_expression)
+            croniter(cron_expr)
             return True
         except Exception as e:
-            logger.error(f"无效的cron表达式 '{self.cron_expression}': {e}")
+            logger.error(f"无效的cron表达式 '{cron_expr}': {e}")
             return False
 
-    def _get_next_run_time(self) -> Optional[datetime]:
+    def _get_next_run_time(self, cron_expr: str) -> Optional[datetime]:
         """获取下次执行时间"""
         try:
-            cron = croniter(self.cron_expression, datetime.now())
+            cron = croniter(cron_expr, datetime.now())
             return cron.get_next(datetime)
         except Exception as e:
             logger.error(f"计算下次执行时间失败: {e}")
             return None
 
-    def _execute_task(self) -> Dict[str, Any]:
+    def _execute_main_task(self) -> Dict[str, Any]:
         """执行主任务"""
-        logger.info("开始执行定时任务...")
+        logger.info("开始执行主任务...")
 
         execution_start = datetime.now()
         result = {
+            "task_name": "main_task",
             "start_time": execution_start,
             "success": False,
             "error": None,
@@ -110,90 +142,176 @@ class TaskScheduler:
             result["results"] = task_results
 
             # 记录成功统计
-            self.successful_runs += 1
+            self.task_stats["main_task"]["successful_runs"] += 1
 
-            logger.info("定时任务执行成功")
+            logger.info("主任务执行成功")
 
             # 记录任务统计信息
             if "total_jira_tasks_created" in task_results:
-                logger.info(f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个")
+                logger.info(
+                    f"本次创建JIRA任务: {task_results['total_jira_tasks_created']} 个"
+                )
 
         except Exception as e:
             result["error"] = str(e)
-            self.failed_runs += 1
-            logger.error(f"定时任务执行失败: {e}")
+            self.task_stats["main_task"]["failed_runs"] += 1
+            logger.error(f"主任务执行失败: {e}")
 
         finally:
             result["end_time"] = datetime.now()
             result["duration"] = result["end_time"] - execution_start
-            self.total_runs += 1
+            self.task_stats["main_task"]["total_runs"] += 1
+            self.task_stats["main_task"]["last_run"] = execution_start
 
-            logger.info(f"任务执行耗时: {result['duration']}")
+            logger.info(f"主任务执行耗时: {result['duration']}")
 
         return result
 
-    def _scheduler_loop(self):
-        """调度器主循环"""
-        logger.info("调度器主循环启动")
+    def _execute_mr_sync_task(self) -> Dict[str, Any]:
+        """执行MR状态同步任务"""
+        logger.info("开始执行MR状态同步任务...")
+
+        execution_start = datetime.now()
+        result = {
+            "task_name": "mr_sync",
+            "start_time": execution_start,
+            "success": False,
+            "error": None,
+            "results": None,
+        }
+
+        try:
+            # 创建MR同步服务并执行任务
+            mr_sync_service = MRStatusSyncService()
+
+            # 测试GitLab连接
+            if not mr_sync_service.test_gitlab_connection():
+                raise Exception("GitLab连接测试失败")
+
+            # 同步MR状态
+            sync_results = mr_sync_service.sync_mr_status()
+
+            result["success"] = sync_results.get("success", False)
+            result["results"] = sync_results
+
+            if result["success"]:
+                # 记录成功统计
+                self.task_stats["mr_sync"]["successful_runs"] += 1
+                logger.info("MR状态同步任务执行成功")
+
+                # 记录同步统计信息
+                updated_mrs = sync_results.get("updated_mrs", 0)
+                total_mrs = sync_results.get("total_mrs", 0)
+                logger.info(f"本次同步MR: {total_mrs} 个检查，{updated_mrs} 个更新")
+            else:
+                result["error"] = sync_results.get("error", "未知错误")
+                raise Exception(result["error"])
+
+        except Exception as e:
+            result["error"] = str(e)
+            self.task_stats["mr_sync"]["failed_runs"] += 1
+            logger.error(f"MR状态同步任务执行失败: {e}")
+
+        finally:
+            result["end_time"] = datetime.now()
+            result["duration"] = result["end_time"] - execution_start
+            self.task_stats["mr_sync"]["total_runs"] += 1
+            self.task_stats["mr_sync"]["last_run"] = execution_start
+
+            logger.info(f"MR状态同步任务执行耗时: {result['duration']}")
+
+        return result
+
+    def _task_scheduler_loop(self, task_name: str, cron_expr: str, task_executor):
+        """单个任务的调度循环"""
+        logger.info(f"任务 [{task_name}] 调度循环启动")
 
         while not self.stop_event.is_set():
             try:
                 # 计算距离下次执行的时间
-                next_run = self._get_next_run_time()
+                next_run = self._get_next_run_time(cron_expr)
                 if not next_run:
-                    logger.error("无法计算下次执行时间，调度器停止")
+                    logger.error(f"任务 [{task_name}] 无法计算下次执行时间，停止调度")
                     break
+
+                # 更新下次执行时间
+                if task_name in self.task_stats:
+                    self.task_stats[task_name]["next_run"] = next_run
 
                 current_time = datetime.now()
                 sleep_seconds = (next_run - current_time).total_seconds()
 
                 if sleep_seconds > 0:
-                    logger.debug(f"距离下次执行还有 {sleep_seconds:.0f} 秒")
+                    logger.debug(
+                        f"任务 [{task_name}] 距离下次执行还有 {sleep_seconds:.0f} 秒"
+                    )
 
                     # 使用事件等待，支持提前中断
                     if self.stop_event.wait(sleep_seconds):
-                        logger.info("收到停止信号，退出调度循环")
+                        logger.info(f"任务 [{task_name}] 收到停止信号，退出调度循环")
                         break
 
                 # 执行任务
                 if not self.stop_event.is_set():
-                    self._execute_task()
+                    task_executor()
 
             except Exception as e:
-                logger.error(f"调度器循环异常: {e}")
+                logger.error(f"任务 [{task_name}] 调度循环异常: {e}")
                 # 出错后等待1分钟再继续
                 if not self.stop_event.wait(60):
                     continue
                 break
 
-        logger.info("调度器主循环结束")
+        logger.info(f"任务 [{task_name}] 调度循环结束")
 
     def start(self):
         """启动调度器"""
-        if not self.enabled:
-            logger.warning("调度器未启用，请设置 SCHEDULER_ENABLED=true")
-            return False
+        # 验证任务配置
+        tasks_to_start = []
 
-        if not self._validate_cron_expression():
+        if self.main_task_enabled:
+            if not self._validate_cron_expression(self.main_task_cron):
+                logger.error("主任务cron表达式验证失败")
+                return False
+            tasks_to_start.append(
+                ("main_task", self.main_task_cron, self._execute_main_task)
+            )
+
+        if self.mr_sync_enabled:
+            if not self._validate_cron_expression(self.mr_sync_cron):
+                logger.error("MR同步任务cron表达式验证失败")
+                return False
+            tasks_to_start.append(
+                ("mr_sync", self.mr_sync_cron, self._execute_mr_sync_task)
+            )
+
+        if not tasks_to_start:
+            logger.warning("没有启用的任务，请检查配置")
             return False
 
         if self.running:
             logger.warning("调度器已在运行中")
             return False
 
-        logger.info("启动任务调度器...")
+        logger.info(f"启动多任务调度器，共 {len(tasks_to_start)} 个任务...")
 
         self.running = True
         self.start_time = datetime.now()
         self.stop_event.clear()
 
-        # 启动调度器线程
-        self.scheduler_thread = threading.Thread(
-            target=self._scheduler_loop, name="TaskScheduler", daemon=True
-        )
-        self.scheduler_thread.start()
+        # 启动各个任务的调度线程
+        for task_name, cron_expr, task_executor in tasks_to_start:
+            thread = threading.Thread(
+                target=self._task_scheduler_loop,
+                args=(task_name, cron_expr, task_executor),
+                name=f"TaskScheduler-{task_name}",
+                daemon=True,
+            )
+            thread.start()
+            self.scheduler_threads[task_name] = thread
+            logger.info(f"任务 [{task_name}] 调度线程已启动")
 
-        logger.info("任务调度器已启动")
+        logger.info("多任务调度器已启动")
         return True
 
     def stop(self):
@@ -202,40 +320,73 @@ class TaskScheduler:
             logger.info("调度器未在运行")
             return
 
-        logger.info("正在停止任务调度器...")
+        logger.info("正在停止多任务调度器...")
 
         self.running = False
         self.stop_event.set()
 
-        # 等待调度器线程结束
-        if self.scheduler_thread and self.scheduler_thread.is_alive():
-            self.scheduler_thread.join(timeout=10)
+        # 等待所有调度器线程结束
+        for task_name, thread in self.scheduler_threads.items():
+            if thread and thread.is_alive():
+                logger.info(f"等待任务 [{task_name}] 线程结束...")
+                thread.join(timeout=10)
 
-        logger.info("任务调度器已停止")
+        self.scheduler_threads.clear()
+        logger.info("多任务调度器已停止")
 
     def get_status(self) -> Dict[str, Any]:
         """获取调度器状态"""
-        status = {
-            "enabled": self.enabled,
-            "running": self.running,
-            "cron_expression": self.cron_expression,
-            "timezone": self.timezone,
-            "total_runs": self.total_runs,
-            "successful_runs": self.successful_runs,
-            "failed_runs": self.failed_runs,
-            "start_time": self.start_time,
-            "next_run_time": None,
-        }
-
+        # 更新下次执行时间
         if self.running:
-            status["next_run_time"] = self._get_next_run_time()
+            for task_name in self.task_stats:
+                if task_name == "main_task" and self.main_task_enabled:
+                    self.task_stats[task_name]["next_run"] = self._get_next_run_time(
+                        self.main_task_cron
+                    )
+                elif task_name == "mr_sync" and self.mr_sync_enabled:
+                    self.task_stats[task_name]["next_run"] = self._get_next_run_time(
+                        self.mr_sync_cron
+                    )
+
+        status = {
+            "running": self.running,
+            "start_time": self.start_time,
+            "tasks": {
+                "main_task": {
+                    "enabled": self.main_task_enabled,
+                    "cron_expression": self.main_task_cron,
+                    "stats": self.task_stats["main_task"],
+                },
+                "mr_sync": {
+                    "enabled": self.mr_sync_enabled,
+                    "cron_expression": self.mr_sync_cron,
+                    "stats": self.task_stats["mr_sync"],
+                },
+            },
+            "timezone": self.timezone,
+        }
 
         return status
 
-    def run_once(self) -> Dict[str, Any]:
-        """立即执行一次任务（不影响定时调度）"""
-        logger.info("手动执行任务...")
-        return self._execute_task()
+    def run_once(self, task_name: str = "main_task") -> Dict[str, Any]:
+        """
+        立即执行一次指定任务（不影响定时调度）
+
+        Args:
+            task_name: 任务名称，'main_task' 或 'mr_sync'
+        """
+        logger.info(f"手动执行任务: {task_name}")
+
+        if task_name == "main_task":
+            return self._execute_main_task()
+        elif task_name == "mr_sync":
+            return self._execute_mr_sync_task()
+        else:
+            return {
+                "success": False,
+                "error": f"未知的任务名称: {task_name}",
+                "task_name": task_name,
+            }
 
 
 def signal_handler(signum, frame):

@@ -94,6 +94,14 @@ class Config:
     # 调度器时区
     SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "Asia/Shanghai")
 
+    # MR状态同步配置
+    # MR状态同步的Cron表达式，默认每10分钟执行一次
+    MR_SYNC_CRON_EXPRESSION = os.getenv("MR_SYNC_CRON_EXPRESSION", "*/10 * * * *")
+    # 是否启用MR状态同步
+    MR_SYNC_ENABLED = os.getenv("MR_SYNC_ENABLED", "true").lower() == "true"
+    # MR状态同步时查询最近几天的MR
+    MR_SYNC_DAYS_BACK = int(os.getenv("MR_SYNC_DAYS_BACK", "7"))
+
     @classmethod
     def validate_config(cls) -> bool:
         """验证配置是否完整"""

@@ -520,6 +520,118 @@ class ProjectStatusDB:
             logger.error(f"更新MR记录状态失败: {e}")
             return False
 
+    def get_pending_mr_records(self, days_back: int = 7) -> List[Dict[str, Any]]:
+        """
+        获取需要同步状态的MR记录
+
+        Args:
+            days_back: 获取最近几天的MR记录
+
+        Returns:
+            需要同步的MR记录列表
+        """
+        try:
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    cursor.execute(
+                        """
+                        SELECT id, sonar_issue_key, mr_url, mr_iid, mr_title, mr_description,
+                               branch_name, source_branch, target_branch, mr_status,
+                               rejection_reason, submitted_time, updated_time, is_latest
+                        FROM mr_records 
+                        WHERE mr_status IN ('created', 'opened') 
+                        AND datetime(submitted_time) >= datetime('now', '-{} days')
+                        ORDER BY submitted_time DESC
+                    """.format(
+                            days_back
+                        ),
+                    )
+
+                    records = []
+                    for row in cursor.fetchall():
+                        records.append(
+                            {
+                                "id": row[0],
+                                "sonar_issue_key": row[1],
+                                "mr_url": row[2],
+                                "mr_iid": row[3],
+                                "mr_title": row[4],
+                                "mr_description": row[5],
+                                "branch_name": row[6],
+                                "source_branch": row[7],
+                                "target_branch": row[8],
+                                "mr_status": row[9],
+                                "rejection_reason": row[10],
+                                "submitted_time": row[11],
+                                "updated_time": row[12],
+                                "is_latest": bool(row[13]),
+                            }
+                        )
+
+                    return records
+
+        except Exception as e:
+            logger.error(f"获取待同步MR记录失败: {e}")
+            return []
+
+    def batch_update_mr_status(self, mr_updates: List[Dict[str, Any]]) -> int:
+        """
+        批量更新MR状态
+
+        Args:
+            mr_updates: MR更新列表，每个元素包含 {'mr_url': str, 'mr_status': str, 'rejection_reason': str}
+
+        Returns:
+            成功更新的记录数
+        """
+        try:
+            updated_count = 0
+            with self.lock:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+
+                    for update in mr_updates:
+                        mr_url = update.get("mr_url")
+                        mr_status = update.get("mr_status")
+                        rejection_reason = update.get("rejection_reason")
+
+                        if not mr_url or not mr_status:
+                            continue
+
+                        if rejection_reason:
+                            cursor.execute(
+                                """
+                                UPDATE mr_records
+                                SET mr_status = ?, rejection_reason = ?, updated_time = CURRENT_TIMESTAMP
+                                WHERE mr_url = ?
+                            """,
+                                (mr_status, rejection_reason, mr_url),
+                            )
+                        else:
+                            cursor.execute(
+                                """
+                                UPDATE mr_records
+                                SET mr_status = ?, updated_time = CURRENT_TIMESTAMP
+                                WHERE mr_url = ?
+                            """,
+                                (mr_status, mr_url),
+                            )
+
+                        if cursor.rowcount > 0:
+                            updated_count += 1
+                            logger.debug(f"批量更新MR状态: {mr_url} -> {mr_status}")
+
+                    conn.commit()
+
+            logger.info(f"批量更新MR状态完成，共更新 {updated_count} 条记录")
+            return updated_count
+
+        except Exception as e:
+            logger.error(f"批量更新MR状态失败: {e}")
+            return 0
+
     def get_mr_records(self, sonar_issue_key: str) -> List[Dict[str, Any]]:
         """
         获取问题的所有MR记录
