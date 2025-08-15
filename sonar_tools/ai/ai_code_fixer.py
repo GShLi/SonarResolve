@@ -118,8 +118,10 @@ class AICodeFixer:
             # 处理每个问题，为每个问题创建独立的MR
             successful_fixes = 0
             for issue in issues:
-                # 先检查问题是否需要修复
-                fix_check_result = self.sonar_service.is_issue_need_fix(issue.key)
+                # 先检查问题是否需要修复（包括规则排除检查）
+                fix_check_result = self.sonar_service.is_issue_need_fix(
+                    issue.key, issue.rule
+                )
 
                 if not fix_check_result.get("need_fix", True):
                     logger.info(

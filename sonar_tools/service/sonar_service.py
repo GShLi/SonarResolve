@@ -4,7 +4,9 @@ SonarQube业务服务
 处理与SonarQube相关的业务逻辑
 """
 
-from typing import Any, Dict, List, Optional
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 from sonar_tools.core.config import Config
 from sonar_tools.core.models import SonarIssue
@@ -24,6 +26,178 @@ class SonarService:
             project_db: 项目数据库实例，如果不提供将自动创建
         """
         self.project_db = project_db if project_db else ProjectStatusDB()
+
+        # 初始化排除规则配置
+        self._excluded_rules: Set[str] = set()
+        self._excluded_rules_cache_time = 0
+        self._load_excluded_rules()
+
+    def _get_etc_dir(self) -> Path:
+        """获取etc配置目录路径"""
+        # 从当前文件位置推导项目根目录
+        current_file = Path(__file__)
+        project_root = current_file.parent.parent.parent  # 回到项目根目录
+        return project_root / "etc"
+
+    def _load_excluded_rules(self) -> None:
+        """
+        加载排除规则配置
+        支持缓存，避免频繁读取文件
+        """
+        try:
+            etc_dir = self._get_etc_dir()
+            base_config_file = etc_dir / "exclude_sonar_rule"
+            override_config_file = etc_dir / "exclude_sonar_rule.override"
+
+            # 检查文件修改时间，决定是否需要重新加载
+            current_time = 0
+            for config_file in [base_config_file, override_config_file]:
+                if config_file.exists():
+                    current_time = max(current_time, config_file.stat().st_mtime)
+
+            # 如果文件没有变化，使用缓存
+            if current_time <= self._excluded_rules_cache_time:
+                return
+
+            logger.info("正在加载SonarQube规则排除配置...")
+
+            # 重新加载配置
+            excluded_rules = set()
+            forced_enable_rules = set()
+
+            # 1. 加载基础配置
+            if base_config_file.exists():
+                base_rules = self._parse_rule_config_file(base_config_file)
+                excluded_rules.update(base_rules)
+                logger.info(f"从基础配置加载了 {len(base_rules)} 个排除规则")
+            else:
+                logger.warning(f"基础配置文件不存在: {base_config_file}")
+
+            # 2. 加载覆盖配置
+            if override_config_file.exists():
+                override_rules = self._parse_override_config_file(override_config_file)
+
+                # 处理覆盖规则
+                for rule_action, rule_id in override_rules:
+                    if rule_action == "ENABLE":
+                        forced_enable_rules.add(rule_id)
+                        excluded_rules.discard(rule_id)  # 从排除列表中移除
+                    elif rule_action == "DISABLE":
+                        excluded_rules.add(rule_id)
+                        forced_enable_rules.discard(rule_id)  # 从强制启用列表中移除
+
+                logger.info(f"从覆盖配置处理了 {len(override_rules)} 个规则")
+            else:
+                logger.info(f"覆盖配置文件不存在: {override_config_file}")
+
+            self._excluded_rules = excluded_rules
+            self._excluded_rules_cache_time = current_time
+
+            logger.info(
+                f"最终排除 {len(self._excluded_rules)} 个SonarQube规则: {sorted(list(self._excluded_rules))}"
+            )
+
+        except Exception as e:
+            logger.error(f"加载排除规则配置失败: {e}")
+            self._excluded_rules = set()  # 出错时清空排除规则，确保不会意外跳过问题
+
+    def _parse_rule_config_file(self, config_file: Path) -> Set[str]:
+        """
+        解析基础规则配置文件
+
+        Args:
+            config_file: 配置文件路径
+
+        Returns:
+            Set[str]: 规则ID集合
+        """
+        rules = set()
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+
+                    # 跳过空行和注释行
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # 提取规则ID（去除行内注释）
+                    rule_id = line.split("#")[0].strip()
+
+                    # 简单验证规则格式
+                    if ":" in rule_id and not rule_id.startswith(" "):
+                        rules.add(rule_id)
+                    else:
+                        logger.warning(
+                            f"配置文件 {config_file} 第 {line_num} 行格式可能有误: {line}"
+                        )
+
+        except Exception as e:
+            logger.error(f"读取配置文件失败 {config_file}: {e}")
+
+        return rules
+
+    def _parse_override_config_file(self, config_file: Path) -> List[tuple]:
+        """
+        解析覆盖规则配置文件
+
+        Args:
+            config_file: 配置文件路径
+
+        Returns:
+            List[tuple]: (action, rule_id) 的列表
+        """
+        rules = []
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+
+                    # 跳过空行和注释行
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # 去除行内注释
+                    line_content = line.split("#")[0].strip()
+                    if not line_content:
+                        continue
+
+                    # 解析覆盖配置格式
+                    if line_content.startswith("ENABLE:"):
+                        rule_id = line_content[7:].strip()
+                        if rule_id:
+                            rules.append(("ENABLE", rule_id))
+                    elif line_content.startswith("DISABLE:"):
+                        rule_id = line_content[8:].strip()
+                        if rule_id:
+                            rules.append(("DISABLE", rule_id))
+                    elif ":" in line_content and not line_content.startswith(" "):
+                        # 简写形式，默认为DISABLE
+                        rules.append(("DISABLE", line_content))
+                    else:
+                        logger.warning(
+                            f"覆盖配置文件 {config_file} 第 {line_num} 行格式可能有误: {line}"
+                        )
+
+        except Exception as e:
+            logger.error(f"读取覆盖配置文件失败 {config_file}: {e}")
+
+        return rules
+
+    def is_rule_excluded(self, rule_id: str) -> bool:
+        """
+        检查规则是否被排除
+
+        Args:
+            rule_id: SonarQube规则ID
+
+        Returns:
+            bool: 如果规则被排除返回True，否则返回False
+        """
+        # 重新加载配置（如果文件有更新）
+        self._load_excluded_rules()
+
+        return rule_id in self._excluded_rules
 
     def create_sonar_issue_record(
         self,
@@ -163,17 +337,21 @@ class SonarService:
             logger.error(f"添加MR记录失败: {e}")
             return False
 
-    def is_issue_need_fix(self, sonar_issue_key: str) -> Dict[str, Any]:
+    def is_issue_need_fix(
+        self, sonar_issue_key: str, sonar_rule: str = None
+    ) -> Dict[str, Any]:
         """
         检查问题是否需要修复
 
         判断逻辑：有且仅有如下情况，issue需要被修复
+        0. 优先检查：如果规则被排除，则不需要修复
         1. 未找到 issue 记录
         2. 找到 issue 记录但未找到 mr 记录
         3. 找到 issue 记录也找到 mr 记录，但 mr 被驳回
 
         Args:
             sonar_issue_key: SonarQube问题Key
+            sonar_rule: SonarQube规则ID（可选）
 
         Returns:
             Dict: 包含需要修复的判断结果和相关信息
@@ -186,6 +364,17 @@ class SonarService:
             }
         """
         try:
+            # 情况0：优先检查规则是否被排除
+            if sonar_rule and self.is_rule_excluded(sonar_rule):
+                logger.info(f"规则 {sonar_rule} 被排除，跳过问题 {sonar_issue_key}")
+                return {
+                    "need_fix": False,
+                    "reason": f"规则 {sonar_rule} 在排除列表中，不需要修复",
+                    "current_status": {"excluded": True},
+                    "latest_mr": None,
+                    "action_required": "无需操作 - 规则已被排除",
+                }
+
             # 情况1：检查问题是否已创建记录
             if not self.project_db.is_task_created(sonar_issue_key):
                 # 先创建一条记录，jira字段设为null
@@ -243,7 +432,9 @@ class SonarService:
                 "current_status": issue_status or {"has_task": True},
                 "latest_mr": latest_mr,
                 "action_required": (
-                    "无需操作" if mr_status in ["merged", "closed"] else "等待MR处理结果"
+                    "无需操作"
+                    if mr_status in ["merged", "closed"]
+                    else "等待MR处理结果"
                 ),
             }
 
