@@ -237,7 +237,9 @@ class AICodeFixer:
                     )
 
                     if mr_record_success:
-                        logger.info(f"成功创建MR记录: {issue.key} -> {mr_result['url']}")
+                        logger.info(
+                            f"成功创建MR记录: {issue.key} -> {mr_result['url']}"
+                        )
                     else:
                         logger.warning(f"MR记录创建失败，但MR已成功创建: {issue.key}")
 
@@ -344,6 +346,26 @@ class AICodeFixer:
                         f"({function_scope.get('start_line')}-{function_scope.get('end_line')})"
                     )
 
+                    # 提取完整的函数代码替代原来的code_snippet
+                    complete_function_code = self._extract_function_code(
+                        full_file_path,
+                        function_scope.get("start_line"),
+                        function_scope.get("end_line"),
+                    )
+
+                    if complete_function_code:
+                        logger.info(
+                            f"成功提取完整函数代码，长度: {len(complete_function_code)} 字符"
+                        )
+                        # 用完整的函数代码替代原来的code_snippet
+                        issue_data["code_snippet"] = complete_function_code
+                        issue_data["original_code_snippet"] = (
+                            issue.code_snippet
+                        )  # 保留原始片段作为备份
+                        issue_data["function_extracted"] = True
+                    else:
+                        logger.warning(f"函数代码提取失败: {issue.key}")
+
                     # 将函数范围信息添加到问题数据中
                     issue_data["function_scope"] = function_scope
                 else:
@@ -371,13 +393,34 @@ class AICodeFixer:
                 # 旧格式：字符串
                 validation_code = str(fixed_code_data)
 
+            # 选择正确的代码片段用于验证
+            # 如果我们提取了完整的函数代码，就使用它进行验证
+            original_code_for_validation = issue_data.get(
+                "original_code_snippet", issue.code_snippet
+            )
+            current_code_for_validation = issue_data[
+                "code_snippet"
+            ]  # 这可能是完整的函数代码
+
             validation_result = self.ai_client.validate_fix(
-                issue.code_snippet, validation_code, issue_data
+                current_code_for_validation, validation_code, issue_data
             )
 
             if not validation_result.get("compliance_check", False):
                 logger.error(f"修复验证失败: {issue.key}")
-                return False
+                # 如果使用完整函数代码验证失败，尝试使用原始代码片段验证
+                if issue_data.get("function_extracted", False):
+                    logger.info(f"尝试使用原始代码片段重新验证: {issue.key}")
+                    validation_result_fallback = self.ai_client.validate_fix(
+                        original_code_for_validation, validation_code, issue_data
+                    )
+                    if not validation_result_fallback.get("compliance_check", False):
+                        logger.error(f"原始代码片段验证也失败: {issue.key}")
+                        return False
+                    else:
+                        logger.info(f"原始代码片段验证成功: {issue.key}")
+                else:
+                    return False
 
             # 应用修复
             relative_path = issue.component.split(":")[-1]  # 获取相对路径
@@ -387,12 +430,18 @@ class AICodeFixer:
             fix_data = {
                 "file_path": relative_path,
                 "fixed_code": fixed_code_data,  # 保持原始格式
-                "code_snippet": issue.code_snippet,
+                "code_snippet": issue_data[
+                    "code_snippet"
+                ],  # 使用处理后的代码片段（可能是完整函数）
+                "original_code_snippet": issue.code_snippet,  # 保留原始代码片段
                 "line": issue.line,
                 "language": issue_data.get("language", ""),
                 "issue_key": issue.key,
                 "rule": issue.rule,
                 "function_scope": function_scope,  # 添加函数范围信息
+                "function_extracted": issue_data.get(
+                    "function_extracted", False
+                ),  # 标记是否提取了完整函数
             }
 
             if self._apply_fix(file_path, fix_data):
@@ -723,7 +772,9 @@ class AICodeFixer:
 
             # 验证行号范围
             if start_line < 1 or end_line > len(lines) or start_line > end_line:
-                logger.error(f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)")
+                logger.error(
+                    f"函数范围无效: {start_line}-{end_line} (文件共{len(lines)}行)"
+                )
                 return False
 
             # 构建新的文件内容
@@ -877,7 +928,9 @@ class AICodeFixer:
                     updated_lines.insert(insert_pos, import_stmt)
                     line_offset += 1
 
-                logger.info(f"AI分析完成: 在第{insert_position+1}行插入{len(imports_to_add)}个导入")
+                logger.info(
+                    f"AI分析完成: 在第{insert_position+1}行插入{len(imports_to_add)}个导入"
+                )
                 if duplicate_imports:
                     logger.info(f"跳过重复导入: {duplicate_imports}")
 
@@ -1084,7 +1137,9 @@ class AICodeFixer:
 
                     return True
                 else:
-                    logger.warning(f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法")
+                    logger.warning(
+                        f"AI应用信心不足: {confidence}/10 < {threshold}，使用传统方法"
+                    )
                     return False
             else:
                 logger.debug(
@@ -1118,3 +1173,49 @@ class AICodeFixer:
             ".scala": "scala",
         }
         return language_map.get(extension, "unknown")
+
+    def _extract_function_code(
+        self, file_path: Path, start_line: int, end_line: int
+    ) -> str:
+        """
+        从文件中提取指定行范围的函数代码
+
+        Args:
+            file_path: 文件路径
+            start_line: 函数开始行号（1-based）
+            end_line: 函数结束行号（1-based）
+
+        Returns:
+            提取的函数代码字符串，失败返回空字符串
+        """
+        try:
+            if not file_path.exists():
+                logger.error(f"文件不存在: {file_path}")
+                return ""
+
+            if start_line <= 0 or end_line <= 0 or start_line > end_line:
+                logger.error(f"无效的行号范围: {start_line}-{end_line}")
+                return ""
+
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+
+            # 检查行号是否超出文件范围
+            if start_line > len(lines) or end_line > len(lines):
+                logger.error(
+                    f"行号超出文件范围: {start_line}-{end_line}，文件总行数: {len(lines)}"
+                )
+                return ""
+
+            # 提取指定范围的行（转换为0-based索引）
+            function_lines = lines[start_line - 1 : end_line]
+            function_code = "".join(function_lines)
+
+            logger.debug(
+                f"成功提取函数代码，行数: {len(function_lines)}，字符数: {len(function_code)}"
+            )
+            return function_code
+
+        except Exception as e:
+            logger.error(f"提取函数代码失败: {e}")
+            return ""
